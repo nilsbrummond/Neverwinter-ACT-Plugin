@@ -20,3 +20,12 @@ State
 - Combat log colored.
 - Companion Pet's owners tracked.
 
+
+Install
+=======
+
+- Download the Neverwinter.cs file to your computer.
+- In the Neverwinter game use the command "/Combatlog 1" to begin logging to a file.  
+- From ACT goto the plugins tab and "browse..." to and then enable the Neverwinter.cs plugin.  
+- Goto the option tab now.   Select the Miscellaneous category and use the "Open log" button.  Select the file "C:\Users\Public\Games\Cryptic Studios\Neverwinter\Live\Logs\GameClient\Combatlog.Log".
+
