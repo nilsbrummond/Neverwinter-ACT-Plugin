@@ -6,7 +6,7 @@ An plugin for ACT (Advanced Combat Tracker) to parse combat log file from Neverw
 - ACT is found at http://advancedcombattracker.com/
 - D&D Neverwinter is found at http://nw.perfectworld.com/
 
-This plugin is based on the version 0.0.5.1 plugin by Antday <Unique>, 
+This plugin is based on the version 0.0.5.1 plugin by Antday \<Unique\>, 
 which is based on the STO plugin from Hilbert @ mancom, Pirye @ ucalegon.
 
 
