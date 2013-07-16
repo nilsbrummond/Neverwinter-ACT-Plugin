@@ -429,18 +429,9 @@ namespace Parsing_Plugin
             }
             else
             {
-                if (lvalid)
-                {
-                    return 1;
-                }
-                else if (rvalid)
-                {
-                    return -1;
-                }
-                else
-                {
-                    return 0;
-                }
+                if (lvalid) { return 1; }
+                else if (rvalid) { return -1; }
+                else { return 0; }
             }
         }
 
@@ -451,7 +442,6 @@ namespace Parsing_Plugin
             if (Data.Tags.TryGetValue("Effectiveness", out duration))
             {
                 double d = (double)duration;
-                if (d == 0) return "";
                 return d.ToString("P1");
             }
 
@@ -506,6 +496,46 @@ namespace Parsing_Plugin
             return Data.Damage.ToString();
         }
 
+        private int GetDTFlankValue(DamageTypeData Data)
+        {
+            if (Data.Items.Count == 0) return 0;
+
+            AttackType at = Data.Items["All"];
+            return GetAAFlankValue(at);
+        }
+
+        private string GetCellDataFlankHits(DamageTypeData Data)
+        {
+            return GetDTFlankValue(Data).ToString(GetIntCommas());
+        }
+
+        private string GetSqlDataFlankHits(DamageTypeData Data)
+        {
+            return GetDTFlankValue(Data).ToString();
+        }
+
+        private string GetCellDataFlankPrec(DamageTypeData Data)
+        {
+            if (Data.Hits == 0) return "0%";
+
+            double fv = (double)GetDTFlankValue(Data);
+            fv *= 100.0;
+            fv /= Data.Hits;
+
+            return fv.ToString("0'%");
+        }
+        
+        private string GetSqlDataFlankPrec(DamageTypeData Data)
+        {
+            if (Data.Hits == 0) return "0%";
+
+            double fv = (double)GetDTFlankValue(Data);
+            fv *= 100.0;
+            fv /= Data.Hits;
+
+            return fv.ToString("0'%");
+        }
+
         private int GetAAFlankValue(AttackType Data)
         {
             int flankCount = 0;
@@ -540,7 +570,7 @@ namespace Parsing_Plugin
 
         private string GetCellDataFlankHits(AttackType Data) 
         {
-            return GetAAFlankValue(Data).ToString();
+            return GetAAFlankValue(Data).ToString(GetIntCommas());
         }
 
         private string GetSqlDataFlankHits(AttackType Data)
@@ -638,11 +668,16 @@ namespace Parsing_Plugin
             DamageTypeData.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
             DamageTypeData.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
             DamageTypeData.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
+            DamageTypeData.ColumnDefs.Add("FlankHits", 
+                new DamageTypeData.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits));
+            DamageTypeData.ColumnDefs.Add("Flank%",
+                new DamageTypeData.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec)); 
 
             AttackType.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs["EncDPS"].GetCellData = (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); };
             AttackType.ColumnDefs["CharDPS"].GetCellData = (Data) => { return Data.CharDPS.ToString(GetFloatCommas()); };
             AttackType.ColumnDefs["DPS"].GetCellData = (Data) => { return Data.DPS.ToString(GetFloatCommas()); };
+            AttackType.ColumnDefs["Average"].GetCellData = (Data) => { return (Data.Average / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
@@ -1392,7 +1427,7 @@ namespace Parsing_Plugin
             ms.Tags.Add("BaseDamage", baseDamage);
             ms.Tags.Add("Flank", flank);
 
-            if ((baseDamage > 0) && (damage > 0))
+            if (baseDamage > 0)
             {
                 double eff = (double)damage / (double)baseDamage;
                 ms.Tags.Add("Effectiveness", eff);
