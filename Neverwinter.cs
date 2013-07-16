@@ -105,7 +105,6 @@ namespace Parsing_Plugin
             // checkBox_mergeNPC
             // 
             this.checkBox_mergeNPC.AutoSize = true;
-            this.checkBox_mergeNPC.Enabled = false;
             this.checkBox_mergeNPC.Location = new System.Drawing.Point(15, 56);
             this.checkBox_mergeNPC.Name = "checkBox_mergeNPC";
             this.checkBox_mergeNPC.Size = new System.Drawing.Size(291, 17);
@@ -507,6 +506,84 @@ namespace Parsing_Plugin
             return Data.Damage.ToString();
         }
 
+        private int GetAAFlankValue(AttackType Data)
+        {
+            int flankCount = 0;
+
+            if (Data.Items.Count == 0) return 0;
+
+            if (Data.Tags.ContainsKey("flankPrecCacheCount"))
+            {
+                int flankPrecCacheCount = (int)Data.Tags["flankPrecCacheCount"];
+                if (flankPrecCacheCount == Data.Items.Count)
+                {
+                    flankCount = (int)Data.Tags["flankPrecCacheValue"];
+                    return flankCount;
+                }
+            }
+
+            foreach (MasterSwing ms in Data.Items)
+            {
+                object fv;
+                if ( ( ms.Damage > 0 ) && (ms.Tags.TryGetValue("Flank", out fv) ) )
+                {
+                    bool flank = (bool)fv;
+                    if (flank) flankCount++;
+                }
+            }
+
+            Data.Tags["flankPrecCacheCount"] = Data.Items.Count;
+            Data.Tags["flankPrecCacheValue"] = flankCount;
+
+            return flankCount;
+        }
+
+        private string GetCellDataFlankHits(AttackType Data) 
+        {
+            return GetAAFlankValue(Data).ToString();
+        }
+
+        private string GetSqlDataFlankHits(AttackType Data)
+        {
+            return GetAAFlankValue(Data).ToString();
+        }
+
+        private int AttackTypeCompareFlankHits(AttackType Left, AttackType Right)
+        {
+            return GetAAFlankValue(Left).CompareTo(GetAAFlankValue(Right));
+        }
+
+        private string GetCellDataFlankPrec(AttackType Data)
+        {
+            // return GetAAFlankValue(Data).ToString() + " / " + Data.Hits.ToString();
+
+            double flankPrec = (double) GetAAFlankValue(Data);
+            flankPrec *= 100.0;
+            flankPrec /= (double)Data.Hits;
+
+            return flankPrec.ToString("0'%");
+        }
+
+        private string GetSqlDataFlankPrec(AttackType Data)
+        {
+            double flankPrec = (double)GetAAFlankValue(Data);
+            flankPrec *= 100.0;
+            flankPrec /= (double)Data.Hits;
+
+            return flankPrec.ToString("0'%");
+        }
+
+        private int AttackTypeCompareFlankPrec(AttackType Left, AttackType Right)
+        {
+            double flankPrecLeft = (double)GetAAFlankValue(Left);
+            flankPrecLeft /= (double)Left.Items.Count;
+
+            double flankPrecRight = (double)GetAAFlankValue(Right);
+            flankPrecRight /= (double)Right.Items.Count;
+
+            return flankPrecLeft.CompareTo(flankPrecRight);
+        }
+
         private void FixupCombatDataStructures()
         {
             // - Remove data types that do not apply to Neverwinter combat logs.
@@ -569,7 +646,10 @@ namespace Parsing_Plugin
             AttackType.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
-
+            AttackType.ColumnDefs.Add("FlankHits",
+                new AttackType.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits, AttackTypeCompareFlankHits));
+            AttackType.ColumnDefs.Add("Flank%",
+                new AttackType.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec, AttackTypeCompareFlankPrec));
 
             MasterSwing.ColumnDefs["Damage"] =
                 new MasterSwing.ColumnDef("Damage", true, "VARCHAR(128)", "DamageString", GetCellDataDamage, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); });
