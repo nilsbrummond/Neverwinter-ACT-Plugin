@@ -21,6 +21,8 @@ State
 - Companion Pet's owners tracked.
 - Added damage base recording and effectiveness (dmg / dmgBase)
 - Removed default ACT features and columns that are not used be the NW plugin
+- Added 'Flank' (Combat Advantage?) as it's own column they way Critical Hits are.
+- Removed Column types and features of ACT that are not used by the NW plugin.
 
 
 Known Issues
