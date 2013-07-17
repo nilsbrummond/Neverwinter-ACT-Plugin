@@ -28,7 +28,7 @@ TODO:
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.7.0")]
+[assembly: AssemblyVersion("0.0.7.1")]
 
 /* Version History - npb
  * 0.0.7.0 - 2013/7/16
@@ -328,6 +328,10 @@ namespace Parsing_Plugin
             // Hallowed Ground
             // 13:07:08:09:37:04.7::Kaps,P[200709935@7009499 Kaps@kaps181],Hallowed Ground,C[386 Entity_Hallowedground_Zone],Dirty Horror,P[201149078@6317095 Dirty Horror@scooby1361],Moon Touched,Pn.Fb9e3q,HitPoints,,-1429.35,0
             ownerIsTheRealSource.Add("Pn.Fb9e3q", true);
+
+            // Shard of the Endless Avalanche
+            // 13:07:17:10:24:30.2::zoorhie,P[200847904@7204132 zoorhie@zeldanora13],Shard,C[620 Entity_Shardoftheendlessavalanche],Chloe Oralia,P[200802208@6132862 Chloe Oralia@alluriya],Shardplosion,Pn.7d13go,Arcane,,2283.86,3696.82
+            ownerIsTheRealSource.Add("Pn.7d13go", true);
         }
         
         private string GetIntCommas()
