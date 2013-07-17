@@ -28,9 +28,12 @@ TODO:
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.6.1")]
+[assembly: AssemblyVersion("0.0.7.0")]
 
 /* Version History - npb
+ * 0.0.7.0 - 2013/7/16
+ *  - Added Flank as a column type
+ *  - Added Effectiveness column ( actual damage / base damage )
  * 0.0.6.0 - 2013/7/9
  *  - Combat log color coding
  *  - Pet name hash tables
