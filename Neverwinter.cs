@@ -514,26 +514,43 @@ namespace Parsing_Plugin
             return GetDTFlankValue(Data).ToString();
         }
 
-        private string GetCellDataFlankPrec(DamageTypeData Data)
+        private double GetDTFlankPrecValue(DamageTypeData Data)
         {
-            if (Data.Hits == 0) return "0%";
+            if (Data.Hits == 0) return 0;
 
             double fv = (double)GetDTFlankValue(Data);
             fv *= 100.0;
             fv /= Data.Hits;
 
-            return fv.ToString("0'%");
+            return fv;
+        }
+
+        private string GetCellDataFlankPrec(DamageTypeData Data)
+        {
+            return GetDTFlankPrecValue(Data).ToString("0'%");
         }
         
         private string GetSqlDataFlankPrec(DamageTypeData Data)
         {
-            if (Data.Hits == 0) return "0%";
+            return GetDTFlankPrecValue(Data).ToString("0'%");
+        }
 
-            double fv = (double)GetDTFlankValue(Data);
-            fv *= 100.0;
-            fv /= Data.Hits;
+        private double GetDTEffectivenessValue(DamageTypeData Data)
+        {
+            if (Data.Items.Count == 0) return Double.NaN;
 
-            return fv.ToString("0'%");
+            AttackType at = Data.Items["All"];
+            return GetAAEffectiveness(at);
+        }
+
+        private string GetCellDataEffectiveness(DamageTypeData Data)
+        {
+            return GetDTEffectivenessValue(Data).ToString("P1");
+        }
+
+        private string GetSqlDataEffectiveness(DamageTypeData Data)
+        {
+            return GetDTEffectivenessValue(Data).ToString("P1");
         }
 
         private int GetAAFlankValue(AttackType Data)
@@ -614,6 +631,107 @@ namespace Parsing_Plugin
             return flankPrecLeft.CompareTo(flankPrecRight);
         }
 
+        private double GetAAEffectiveness(AttackType Data)
+        {
+            int dmgTotal = 0;
+            int baseDmgTotal = 0;
+            double effectiveness = 0.0;
+
+            if (Data.Items.Count == 0) return Double.NaN;
+
+            if (Data.Tags.ContainsKey("effectivenessCacheCount"))
+            {
+                int flankPrecCacheCount = (int)Data.Tags["effectivenessCacheCount"];
+                if (flankPrecCacheCount == Data.Items.Count)
+                {
+                    effectiveness = (double)Data.Tags["effectivenessCacheValue"];
+                    return effectiveness;
+                }
+            }
+
+            foreach (MasterSwing ms in Data.Items)
+            {
+                object fv;
+                if (ms.Tags.TryGetValue("BaseDamage", out fv))
+                {
+                    int bd = (int) fv;
+
+                    if (bd > 0)
+                    {
+                        dmgTotal += ms.Damage.Number;
+                        baseDmgTotal += bd;
+                    }
+                }
+            }
+
+            effectiveness = (double) dmgTotal / (double) baseDmgTotal;
+
+            Data.Tags["effectivenessCacheCount"] = Data.Items.Count;
+            Data.Tags["effectivenessCacheValue"] = effectiveness;
+
+            return effectiveness;
+        }
+
+        private string GetCellDataEffectiveness(AttackType Data)
+        {
+            return GetAAEffectiveness(Data).ToString("P1");
+        }
+
+        private string GetSqlDataEffectiveness(AttackType Data)
+        {
+            return GetAAEffectiveness(Data).ToString("P1");
+        }
+
+        private int AttackTypeCompareEffectiveness(AttackType Left, AttackType Right)
+        {
+            return GetAAEffectiveness(Left).CompareTo(GetAAEffectiveness(Right));
+        }
+
+        private string GetCellDataFlankDamPrec(CombatantData Data)
+        {
+            return GetCellDataFlankPrec(Data.Items["Outgoing Damage"]);
+        }
+
+        private string GetSqlDataFlankDamPrec(CombatantData Data)
+        {
+            return GetSqlDataFlankPrec(Data.Items["Outgoing Damage"]);
+        }
+
+        private int CDCompareFlankDamPrec(CombatantData Left, CombatantData Right)
+        {
+            return GetDTFlankPrecValue(Left.Items["Outgoing Damage"]).CompareTo(GetDTFlankPrecValue(Right.Items["Outgoing Damage"]));
+        }
+
+        private string GetCellDataDmgEffectPrec(CombatantData Data)
+        {
+            return GetCellDataEffectiveness(Data.Items["Outgoing Damage"]);
+        }
+
+        private string GetSqlDataDmgEffectPrec(CombatantData Data)
+        {
+            return GetSqlDataEffectiveness(Data.Items["Outgoing Damage"]);
+        }
+
+        private int CDCompareDmgEffectPrec(CombatantData Left, CombatantData Right)
+        {
+            return GetDTEffectivenessValue(Left.Items["Outgoing Damage"]).CompareTo(GetDTEffectivenessValue(Right.Items["Outgoing Damage"]));
+        }
+
+        private string GetCellDataDmgTakenEffectPrec(CombatantData Data)
+        {
+            return GetCellDataEffectiveness(Data.Items["Incoming Damage"]);
+        }
+
+        private string GetSqlDataDmgTakenEffectPrec(CombatantData Data)
+        {
+            return GetSqlDataEffectiveness(Data.Items["Incoming Damage"]);
+        }
+
+        private int CDCompareDmgTakenEffectPrec(CombatantData Left, CombatantData Right)
+        {
+            return GetDTEffectivenessValue(Left.Items["Incoming Damage"]).CompareTo(GetDTEffectivenessValue(Right.Items["Incoming Damage"]));
+        }
+
         private void FixupCombatDataStructures()
         {
             // - Remove data types that do not apply to Neverwinter combat logs.
@@ -638,6 +756,14 @@ namespace Parsing_Plugin
             CombatantData.ColumnDefs["EncHPS"].GetCellData = (Data) => { return (Data.EncHPS / 10).ToString(GetFloatCommas()); };
             CombatantData.ColumnDefs["HealingTaken"].GetCellData = (Data) => { return (Data.HealsTaken / 10).ToString(GetIntCommas()); };
             CombatantData.ColumnDefs["DamageTaken"].GetCellData = (Data) => { return (Data.DamageTaken / 10).ToString(GetIntCommas()); };
+
+            CombatantData.ColumnDefs.Add("FlankDam%",
+                new CombatantData.ColumnDef("FlankDam%", false, "VARCHAR(8)", "FlankDamPrec", GetCellDataFlankDamPrec, GetSqlDataFlankDamPrec, CDCompareFlankDamPrec));
+            CombatantData.ColumnDefs.Add("DmgEffect%",
+                new CombatantData.ColumnDef("DmgEffect%", false, "VARCHAR(8)", "DmgEffectPrec", GetCellDataDmgEffectPrec, GetSqlDataDmgEffectPrec, CDCompareDmgEffectPrec));
+            CombatantData.ColumnDefs.Add("DmgTakenEffect%",
+                new CombatantData.ColumnDef("DmgTakenEffect%", false, "VARCHAR(8)", "DmgTakenEffectPrec", GetCellDataDmgTakenEffectPrec, GetSqlDataDmgTakenEffectPrec, CDCompareDmgTakenEffectPrec));
+
 
             CombatantData.OutgoingDamageTypeDataObjects.Remove("Auto-Attack (Out)");
             CombatantData.OutgoingDamageTypeDataObjects.Remove("Skill/Ability (Out)");
@@ -672,6 +798,8 @@ namespace Parsing_Plugin
                 new DamageTypeData.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits));
             DamageTypeData.ColumnDefs.Add("Flank%",
                 new DamageTypeData.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec)); 
+            DamageTypeData.ColumnDefs.Add("Effectiveness",
+                new DamageTypeData.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness));
 
             AttackType.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs["EncDPS"].GetCellData = (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); };
@@ -685,6 +813,8 @@ namespace Parsing_Plugin
                 new AttackType.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits, AttackTypeCompareFlankHits));
             AttackType.ColumnDefs.Add("Flank%",
                 new AttackType.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec, AttackTypeCompareFlankPrec));
+            AttackType.ColumnDefs.Add("Effectiveness",
+                new AttackType.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness, AttackTypeCompareEffectiveness));
 
             MasterSwing.ColumnDefs["Damage"] =
                 new MasterSwing.ColumnDef("Damage", true, "VARCHAR(128)", "DamageString", GetCellDataDamage, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); });
@@ -696,7 +826,7 @@ namespace Parsing_Plugin
                 new MasterSwing.ColumnDef("BaseDamage", true, "INT", "BaseDamageString", GetCellDataBaseDamage, GetSqlDataBaseDamage, MasterSwingCompareBaseDamage));
 
             MasterSwing.ColumnDefs.Add("Effectiveness",
-                new MasterSwing.ColumnDef("Effectiveness", true, "INT", "EffectivenessString", GetCellDataEffectiveness, GetSqlDataEffectiveness, MasterSwingCompareEffectiveness));
+                new MasterSwing.ColumnDef("Effectiveness", true, "VARCHAR(8)", "EffectivenessString", GetCellDataEffectiveness, GetSqlDataEffectiveness, MasterSwingCompareEffectiveness));
 
             ActGlobals.oFormActMain.ValidateLists();
             ActGlobals.oFormActMain.ValidateTableSetup();
