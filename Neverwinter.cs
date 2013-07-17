@@ -28,7 +28,7 @@ TODO:
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.7.1")]
+[assembly: AssemblyVersion("0.0.7.2")]
 
 /* Version History - npb
  * 0.0.7.0 - 2013/7/16
@@ -1368,6 +1368,15 @@ namespace Parsing_Plugin
                             }
                         }
                     }
+                    else if (l.evtInt == "Pn.R1tsg4")
+                    {
+                        // Shocking execution
+                        // There is a HitPoints of value zero that is assioatied with shocking execution.
+                        // Note that the <EvtInt> is different from the actual damaging log entry.
+                        // Just ignore it...
+                        // 13:07:17:10:33:02.1::Lodur,P[201093074@7545190 Lodur@lodur42],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Shocking Execution,Pn.R1tsg4,HitPoints,,0,0
+
+                    }
                     else
                     {
                         // Default heal.
@@ -1508,7 +1517,18 @@ namespace Parsing_Plugin
                 }
                 else
                 {
-                    unknownLineCount++;
+                    if (l.evtInt == "Pn.Yswhgl1")
+                    {
+                        // Shocking Execution
+                        // It bypasses all defenses.  This, it turns out, leads to a non-zero damage and a 0 base damage.
+                        // 13:07:17:10:33:01.9::Lodur,P[201093074@7545190 Lodur@lodur42],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Shocking Execution,Pn.Yswhgl1,Physical,Critical|Flank|Kill,11887.1,0
+
+                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type);
+                    }
+                    else
+                    {
+                        unknownLineCount++;
+                    }
                 }
             }
 
