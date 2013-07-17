@@ -19,6 +19,13 @@ State
 - I'm sure there are losts of different special cases left to handle.
 - Combat log colored.
 - Companion Pet's owners tracked.
+- Added damage base recording and effectiveness (dmg / dmgBase)
+- Removed default ACT features and columns that are not used be the NW plugin
+
+
+Known Issues
+============
+- Devoted Cleric power "Flame Strike" causes falling damage that can not be tracked.  Falling damage does not specify who/what caused the fall.
 
 
 Install

@@ -21,15 +21,19 @@ TODO:
 - filter all non-player-chars check, how to handle ??
 - activate help text in options window
 - handle unknown activities, transfer into known activities
+- remove threat as it is not in the logs.
 
 */
 
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.6.0")]
+[assembly: AssemblyVersion("0.0.7.0")]
 
 /* Version History - npb
+ * 0.0.7.0 - 2013/7/16
+ *  - Added Flank as a column type
+ *  - Added Effectiveness column ( actual damage / base damage )
  * 0.0.6.0 - 2013/7/9
  *  - Combat log color coding
  *  - Pet name hash tables
@@ -38,7 +42,7 @@ TODO:
  *  - Evaluating some of the delay parsing to see if needed
  *  - other minor improvements
  *  - improved combat start detection
- *  TODO: remove threat as it is not in the logs.
+ *  - Chaotic Growth tracking
  */
 
 /* Version History - Antday <Unique>
@@ -53,40 +57,43 @@ TODO:
  * 0.0.1.0 - 2013/04/05
  *   - initial alpha version
 */
-namespace Parsing_Plugin {
-    public class NW_Parser : UserControl, IActPluginV1 {
-  
-		#region Designer Created Code (Avoid editing)
-		
+namespace Parsing_Plugin
+{
+    public class NW_Parser : UserControl, IActPluginV1
+    {
+
+        #region Designer Created Code (Avoid editing)
+
         private System.ComponentModel.IContainer components = null;
-        protected override void Dispose(bool disposing) {
-            if (disposing && (components != null)) {
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && (components != null))
+            {
                 components.Dispose();
             }
             base.Dispose(disposing);
         }
-		
-		#region Windows Form Designer generated code
-		
-		private void InitializeComponent() {
-		
+
+        #region Windows Form Designer generated code
+
+        private void InitializeComponent()
+        {
             this.label1 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
-            this.checkBox_filterAlly = new System.Windows.Forms.CheckBox();
+            this.checkBox_mergeNPC = new System.Windows.Forms.CheckBox();
             this.checkBox_mergePets = new System.Windows.Forms.CheckBox();
             this.checkBox_flankSkill = new System.Windows.Forms.CheckBox();
-			this.SuspendLayout();
-			
-			 // label1
+            this.SuspendLayout();
+            // 
+            // label1
             // 
             this.label1.AutoSize = true;
             this.label1.Font = new System.Drawing.Font("Microsoft Sans Serif", 10.25F, ((System.Drawing.FontStyle)((System.Drawing.FontStyle.Bold | System.Drawing.FontStyle.Underline))), System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label1.Location = new System.Drawing.Point(12, 9);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(350, 13);
+            this.label1.Size = new System.Drawing.Size(256, 17);
             this.label1.TabIndex = 0;
             this.label1.Text = "Neverwinter parser plugin Options";
-            //this.label1.MouseHover += new System.EventHandler(this.label1_MouseHover);
             // 
             // label2
             // 
@@ -94,86 +101,79 @@ namespace Parsing_Plugin {
             this.label2.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Underline, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label2.Location = new System.Drawing.Point(12, 40);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(44, 13);
+            this.label2.Size = new System.Drawing.Size(43, 13);
             this.label2.TabIndex = 1;
             this.label2.Text = "Options";
             // 
-            // checkBox_filterAlly
+            // checkBox_mergeNPC
             // 
-            this.checkBox_filterAlly.AutoSize = true;
-            this.checkBox_filterAlly.Checked = false;
-			this.checkBox_filterAlly.Enabled = false;
-            //this.checkBox_filterAlly.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBox_filterAlly.Location = new System.Drawing.Point(15, 56);
-            this.checkBox_filterAlly.Name = "checkBox_filterAlly";
-            this.checkBox_filterAlly.Size = new System.Drawing.Size(204, 17);
-            this.checkBox_filterAlly.TabIndex = 2;
-            this.checkBox_filterAlly.Text = "Filter all Non-Player-Characters from ACT";
-            this.checkBox_filterAlly.UseVisualStyleBackColor = true;
-            //this.checkBox_filterAlly.MouseHover += new System.EventHandler(this.checkBox_filterAlly_MouseHover);
+            this.checkBox_mergeNPC.AutoSize = true;
+            this.checkBox_mergeNPC.Location = new System.Drawing.Point(15, 56);
+            this.checkBox_mergeNPC.Name = "checkBox_mergeNPC";
+            this.checkBox_mergeNPC.Size = new System.Drawing.Size(291, 17);
+            this.checkBox_mergeNPC.TabIndex = 2;
+            this.checkBox_mergeNPC.Text = "Merge all NPC combatants by removing NPC unique IDs";
+            this.checkBox_mergeNPC.UseVisualStyleBackColor = true;
             // 
             // checkBox_mergePets
             // 
             this.checkBox_mergePets.AutoSize = true;
-			this.checkBox_mergePets.Checked = false;
-			//this.checkBox_mergePets.CheckState = System.Windows.Forms.CheckState.Checked;
             this.checkBox_mergePets.Location = new System.Drawing.Point(15, 72);
             this.checkBox_mergePets.Name = "checkBox_mergePets";
-            this.checkBox_mergePets.Size = new System.Drawing.Size(181, 17);
+            this.checkBox_mergePets.Size = new System.Drawing.Size(284, 17);
             this.checkBox_mergePets.TabIndex = 3;
             this.checkBox_mergePets.Text = "Merge all pet data to owner and remove pet from listing";
             this.checkBox_mergePets.UseVisualStyleBackColor = true;
-            //this.checkBox_mergePets.MouseHover += new System.EventHandler(this.checkBox_mergePets_MouseHover);
             // 
             // checkBox_flankSkill
             // 
             this.checkBox_flankSkill.AutoSize = true;
-            this.checkBox_flankSkill.Checked = false;
-            //this.checkBox_flankSkill.CheckState = System.Windows.Forms.CheckState.Checked;
             this.checkBox_flankSkill.Location = new System.Drawing.Point(15, 88);
             this.checkBox_flankSkill.Name = "checkBox_flankSkill";
-            this.checkBox_flankSkill.Size = new System.Drawing.Size(350, 17);
+            this.checkBox_flankSkill.Size = new System.Drawing.Size(213, 17);
             this.checkBox_flankSkill.TabIndex = 4;
-            this.checkBox_flankSkill.Text = "Merge flank and non-flank skills together";
+            this.checkBox_flankSkill.Text = "Split skills in to flank and non-flank skills";
             this.checkBox_flankSkill.UseVisualStyleBackColor = true;
-            //this.checkBox_flankSkill.MouseHover += new System.EventHandler(this.checkBox_flankSkill_MouseHover);
-			
-			//this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            //this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            // 
+            // NW_Parser
+            // 
             this.Controls.Add(this.checkBox_flankSkill);
             this.Controls.Add(this.checkBox_mergePets);
-            this.Controls.Add(this.checkBox_filterAlly);
+            this.Controls.Add(this.checkBox_mergeNPC);
             this.Controls.Add(this.label2);
             this.Controls.Add(this.label1);
-            
-			this.Name = "NW_Parser";
+            this.Name = "NW_Parser";
             this.Size = new System.Drawing.Size(650, 150);
             this.ResumeLayout(false);
             this.PerformLayout();
 
-		}
+        }
 
-		#endregion
-		
+        #endregion
+
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.Label label2;
-        private System.Windows.Forms.CheckBox checkBox_filterAlly;
+        private System.Windows.Forms.CheckBox checkBox_mergeNPC;
         private System.Windows.Forms.CheckBox checkBox_mergePets;
         private System.Windows.Forms.CheckBox checkBox_flankSkill;
-		
-		#endregion
-		
-		public NW_Parser() {
+
+        #endregion
+
+        public NW_Parser()
+        {
             InitializeComponent();
         }
-		
-		internal static string[] separatorLog = new string[] { "::", "," };
-        internal static string unk = "[Unknown]", unkInt = "C[Unknown]", pet = "<PET> ", unkAbility = "Unknown Ability";
-        internal static CultureInfo cultureLog = new CultureInfo("en-US"), cultureDisplay = new CultureInfo("de-DE");
+
+        internal static string[] separatorLog = new string[] { "::", "," };
+        internal static string unk = "[Unknown]", unkInt = "C[0 Unknown]", pet = "<PET> ", unkAbility = "Unknown Ability";
+        internal static CultureInfo cultureLog = new CultureInfo("en-US");
+
+        // This is for SQL syntax; do not change
+        internal static CultureInfo usCulture = new CultureInfo("en-US");
 
         // Pet internal id to owner display name
 
-        internal static  Dictionary<string, PetInfo> petPlayerCache = new Dictionary<string, PetInfo>();
+        internal static Dictionary<string, PetInfo> petPlayerCache = new Dictionary<string, PetInfo>();
         internal Dictionary<string, PetInfo> playerPetCache = new Dictionary<string, PetInfo>();
 
         internal Dictionary<string, bool> ownerIsTheRealSource = null;
@@ -184,19 +184,21 @@ namespace Parsing_Plugin {
         // Instant when the current combat action took place
         private DateTime curActionTime = DateTime.MinValue;
 
-        // Lines of the current action
-        private List<ParsedLine> delayedActions = new List<ParsedLine>(20);
-
         Label lblStatus = null;
-		
-		TreeNode optionsNode = null;
-		
-		string settingsFile = Path.Combine(ActGlobals.oFormActMain.AppDataFolder.FullName, "neverwinter.config.xml");
+
+        TreeNode optionsNode = null;
+
+        string settingsFile = Path.Combine(ActGlobals.oFormActMain.AppDataFolder.FullName, "neverwinter.config.xml");
         SettingsSerializer xmlSettings;
-		
-        public void InitPlugin(TabPage pluginScreenSpace, Label pluginStatusText) {
-            			
-			// Push the option screen into the option tab
+
+        private int parsedLineCount = 0;
+        private int errorLineCount = 0;
+        private int unknownLineCount = 0;
+
+        public void InitPlugin(TabPage pluginScreenSpace, Label pluginStatusText)
+        {
+
+            // Push the option screen into the option tab
             int dcIndex = -1;
             for (int i = 0; i < ActGlobals.oFormActMain.OptionsTreeView.Nodes.Count; i++)
             {
@@ -215,7 +217,7 @@ namespace Parsing_Plugin {
             else
             {
                 ActGlobals.oFormActMain.OptionsTreeView.Nodes.Add("Neverwinter");
-                dcIndex = ActGlobals.oFormActMain.OptionsTreeView.Nodes.Count-1;
+                dcIndex = ActGlobals.oFormActMain.OptionsTreeView.Nodes.Count - 1;
                 optionsNode = ActGlobals.oFormActMain.OptionsTreeView.Nodes[dcIndex].Nodes.Add("General");
                 ActGlobals.oFormActMain.OptionsControlSets.Add(@"Neverwinter\General", new List<Control> { this });
                 Label lblConfig = new Label();
@@ -225,12 +227,12 @@ namespace Parsing_Plugin {
             }
             ActGlobals.oFormActMain.OptionsTreeView.Nodes[dcIndex].Expand();
             //ActGlobals.oFormActMain.SetOptionsHelpText("testing");
-	
-			// Neverwinter settings file
-			xmlSettings = new SettingsSerializer(this);
-			LoadSettings();
-	
-			// Setting this Regex will allow ACT to extract the character's name from the file name as the first capture group
+
+            // Neverwinter settings file
+            xmlSettings = new SettingsSerializer(this);
+            LoadSettings();
+
+            // Setting this Regex will allow ACT to extract the character's name from the file name as the first capture group
             // when opening new log files. We'll say the log file name may look like "20080706-Player.log"
             ActGlobals.oFormActMain.LogPathHasCharName = false;
 
@@ -242,13 +244,16 @@ namespace Parsing_Plugin {
             ActGlobals.oFormActMain.LogFileParentFolderName = "GameClient";
 
             // Then to apply the settings and restart the log checking thread
-            try {
+            try
+            {
                 ActGlobals.oFormActMain.ResetCheckLogs();
-            } catch {
+            }
+            catch
+            {
                 // Ignore when no log file is currently open
             }
-            
-			// This is the absolute path of where you wish ACT generated macro exports to be put. I'll leave it up to you
+
+            // This is the absolute path of where you wish ACT generated macro exports to be put. I'll leave it up to you
             // to determine this path programatically. If left blank, ACT will attempt to find EQ2 by registry or log file parents.
             // ActGlobals.oFormActMain.GameMacroFolder = @"C:\Program Files\Game Company\Game Folder";
 
@@ -274,14 +279,17 @@ namespace Parsing_Plugin {
 
             InitializeOwnerIsTheRealSource();
 
-			// Set status text to successfully loaded
+            FixupCombatDataStructures();
+
+            // Set status text to successfully loaded
             lblStatus = pluginStatusText;
             lblStatus.Text = "Neverwinter ACT plugin loaded";
         }
 
         private void InitializeOwnerIsTheRealSource()
         {
-            // TODO:  Should this be the default (owner gets credit) the exception be the src get credit.
+            // TODO:  Should this be the default (owner gets credit) the exception be the src gets credit?
+            //        Need to look at that appoach.  Would a Pet be the only exception to that rule?
 
             ownerIsTheRealSource = new Dictionary<string, bool>();
 
@@ -321,14 +329,521 @@ namespace Parsing_Plugin {
             // 13:07:08:09:37:04.7::Kaps,P[200709935@7009499 Kaps@kaps181],Hallowed Ground,C[386 Entity_Hallowedground_Zone],Dirty Horror,P[201149078@6317095 Dirty Horror@scooby1361],Moon Touched,Pn.Fb9e3q,HitPoints,,-1429.35,0
             ownerIsTheRealSource.Add("Pn.Fb9e3q", true);
         }
+        
+        private string GetIntCommas()
+        {
+            return ActGlobals.mainTableShowCommas ? "#,0" : "0";
+        }
 
-        void oFormActMain_LogFileChanged(bool IsImport, string NewLogFileName) {
+        private string GetFloatCommas()
+        {
+            return ActGlobals.mainTableShowCommas ? "#,0.00" : "0.00";
+        }
+
+        private string GetCellDataFlank(MasterSwing Data)
+        {
+            object val;
+            bool flank = false;
+
+            if (Data.Tags.TryGetValue("Flank", out val))
+            {
+                flank = (bool)val;
+            }
+
+            return flank.ToString();
+        }
+
+        private string GetSqlDataFlank(MasterSwing Data)
+        {
+            object val;
+            bool flank = false;
+
+            if (Data.Tags.TryGetValue("Flank", out val))
+            {
+                flank = (bool)val;
+            }
+
+            return flank.ToString(usCulture)[0].ToString();
+        }
+
+        private int MasterSwingCompareFlank(MasterSwing Left, MasterSwing Right)
+        {
+            object val;
+            bool leftFlank = false;
+            bool rightFlank = false;
+
+            if (Left.Tags.TryGetValue("Flank", out val))
+            {
+                leftFlank = (bool)val;
+            }
+
+            if (Right.Tags.TryGetValue("Flank", out val))
+            {
+                rightFlank = (bool)val;
+            }
+
+            return leftFlank.CompareTo(rightFlank);
+        }
+
+        private string GetCellDataBaseDamage(MasterSwing Data)
+        {
+            object duration;
+
+            if (Data.Tags.TryGetValue("BaseDamage", out duration))
+            {
+                int d = (int)duration;
+                if (d == 0) return "";
+
+                double dd = (double)d;
+                dd /= 10;
+                return dd.ToString("F1");
+            }
+
+            return "";
+        }
+
+        private string GetSqlDataBaseDamage(MasterSwing Data)
+        {
+            object duration;
+
+            if (Data.Tags.TryGetValue("BaseDamage", out duration))
+            {
+                int d = (int)duration;
+                return d.ToString();
+            }
+
+            return "0";
+        }
+
+        private int MasterSwingCompareBaseDamage(MasterSwing Left, MasterSwing Right)
+        {
+            object l;
+            object r;
+
+            bool lvalid = Left.Tags.TryGetValue("BaseDamage", out l);
+            bool rvalid = Right.Tags.TryGetValue("BaseDamage", out r);
+
+            if (lvalid && rvalid)
+            {
+                int dl = (int)l;
+                int dr = (int)r;
+
+                return dl.CompareTo(dr);
+            }
+            else
+            {
+                if (lvalid) { return 1; }
+                else if (rvalid) { return -1; }
+                else { return 0; }
+            }
+        }
+
+        private string GetCellDataEffectiveness(MasterSwing Data)
+        {
+            object duration;
+
+            if (Data.Tags.TryGetValue("Effectiveness", out duration))
+            {
+                double d = (double)duration;
+                return d.ToString("P1");
+            }
+
+            return "";
+        }
+
+        private string GetSqlDataEffectiveness(MasterSwing Data)
+        {
+            object duration;
+
+            if (Data.Tags.TryGetValue("Effectiveness", out duration))
+            {
+                double d = (double)duration;
+                return d.ToString();
+            }
+
+            return "0";
+        }
+
+        private int MasterSwingCompareEffectiveness(MasterSwing Left, MasterSwing Right)
+        {
+            object l;
+            object r;
+
+            bool lvalid = Left.Tags.TryGetValue("Effectiveness", out l);
+            bool rvalid = Right.Tags.TryGetValue("Effectiveness", out r);
+
+            if (lvalid && rvalid)
+            {
+                double dl = (double)l;
+                double dr = (double)r;
+
+                return dl.CompareTo(dr);
+            }
+            else
+            {
+                if (lvalid) { return 1; }
+                else if (rvalid) { return -1; }
+                else { return 0; }
+            }
+        }
+        private string GetCellDataDamage(MasterSwing Data)
+        {
+            if (Data.Damage > 0)
+            {
+                int d = (int)Data.Damage;
+                double dd = (double)d;
+                dd /= 10;
+                return dd.ToString("F1");
+            }
+
+            return Data.Damage.ToString();
+        }
+
+        private int GetDTFlankValue(DamageTypeData Data)
+        {
+            if (Data.Items.Count == 0) return 0;
+
+            AttackType at = Data.Items["All"];
+            return GetAAFlankValue(at);
+        }
+
+        private string GetCellDataFlankHits(DamageTypeData Data)
+        {
+            return GetDTFlankValue(Data).ToString(GetIntCommas());
+        }
+
+        private string GetSqlDataFlankHits(DamageTypeData Data)
+        {
+            return GetDTFlankValue(Data).ToString();
+        }
+
+        private double GetDTFlankPrecValue(DamageTypeData Data)
+        {
+            if (Data.Hits == 0) return 0;
+
+            double fv = (double)GetDTFlankValue(Data);
+            fv *= 100.0;
+            fv /= Data.Hits;
+
+            return fv;
+        }
+
+        private string GetCellDataFlankPrec(DamageTypeData Data)
+        {
+            return GetDTFlankPrecValue(Data).ToString("0'%");
+        }
+        
+        private string GetSqlDataFlankPrec(DamageTypeData Data)
+        {
+            return GetDTFlankPrecValue(Data).ToString("0'%");
+        }
+
+        private double GetDTEffectivenessValue(DamageTypeData Data)
+        {
+            if (Data.Items.Count == 0) return Double.NaN;
+
+            AttackType at = Data.Items["All"];
+            return GetAAEffectiveness(at);
+        }
+
+        private string GetCellDataEffectiveness(DamageTypeData Data)
+        {
+            return GetDTEffectivenessValue(Data).ToString("P1");
+        }
+
+        private string GetSqlDataEffectiveness(DamageTypeData Data)
+        {
+            return GetDTEffectivenessValue(Data).ToString("P1");
+        }
+
+        private int GetAAFlankValue(AttackType Data)
+        {
+            int flankCount = 0;
+
+            if (Data.Items.Count == 0) return 0;
+
+            if (Data.Tags.ContainsKey("flankPrecCacheCount"))
+            {
+                int flankPrecCacheCount = (int)Data.Tags["flankPrecCacheCount"];
+                if (flankPrecCacheCount == Data.Items.Count)
+                {
+                    flankCount = (int)Data.Tags["flankPrecCacheValue"];
+                    return flankCount;
+                }
+            }
+
+            foreach (MasterSwing ms in Data.Items)
+            {
+                object fv;
+                if ( ( ms.Damage > 0 ) && (ms.Tags.TryGetValue("Flank", out fv) ) )
+                {
+                    bool flank = (bool)fv;
+                    if (flank) flankCount++;
+                }
+            }
+
+            Data.Tags["flankPrecCacheCount"] = Data.Items.Count;
+            Data.Tags["flankPrecCacheValue"] = flankCount;
+
+            return flankCount;
+        }
+
+        private string GetCellDataFlankHits(AttackType Data) 
+        {
+            return GetAAFlankValue(Data).ToString(GetIntCommas());
+        }
+
+        private string GetSqlDataFlankHits(AttackType Data)
+        {
+            return GetAAFlankValue(Data).ToString();
+        }
+
+        private int AttackTypeCompareFlankHits(AttackType Left, AttackType Right)
+        {
+            return GetAAFlankValue(Left).CompareTo(GetAAFlankValue(Right));
+        }
+
+        private string GetCellDataFlankPrec(AttackType Data)
+        {
+            // return GetAAFlankValue(Data).ToString() + " / " + Data.Hits.ToString();
+
+            double flankPrec = (double) GetAAFlankValue(Data);
+            flankPrec *= 100.0;
+            flankPrec /= (double)Data.Hits;
+
+            return flankPrec.ToString("0'%");
+        }
+
+        private string GetSqlDataFlankPrec(AttackType Data)
+        {
+            double flankPrec = (double)GetAAFlankValue(Data);
+            flankPrec *= 100.0;
+            flankPrec /= (double)Data.Hits;
+
+            return flankPrec.ToString("0'%");
+        }
+
+        private int AttackTypeCompareFlankPrec(AttackType Left, AttackType Right)
+        {
+            double flankPrecLeft = (double)GetAAFlankValue(Left);
+            flankPrecLeft /= (double)Left.Items.Count;
+
+            double flankPrecRight = (double)GetAAFlankValue(Right);
+            flankPrecRight /= (double)Right.Items.Count;
+
+            return flankPrecLeft.CompareTo(flankPrecRight);
+        }
+
+        private double GetAAEffectiveness(AttackType Data)
+        {
+            int dmgTotal = 0;
+            int baseDmgTotal = 0;
+            double effectiveness = 0.0;
+
+            if (Data.Items.Count == 0) return Double.NaN;
+
+            if (Data.Tags.ContainsKey("effectivenessCacheCount"))
+            {
+                int flankPrecCacheCount = (int)Data.Tags["effectivenessCacheCount"];
+                if (flankPrecCacheCount == Data.Items.Count)
+                {
+                    effectiveness = (double)Data.Tags["effectivenessCacheValue"];
+                    return effectiveness;
+                }
+            }
+
+            foreach (MasterSwing ms in Data.Items)
+            {
+                object fv;
+                if (ms.Tags.TryGetValue("BaseDamage", out fv))
+                {
+                    int bd = (int) fv;
+
+                    if (bd > 0)
+                    {
+                        dmgTotal += ms.Damage.Number;
+                        baseDmgTotal += bd;
+                    }
+                }
+            }
+
+            effectiveness = (double) dmgTotal / (double) baseDmgTotal;
+
+            Data.Tags["effectivenessCacheCount"] = Data.Items.Count;
+            Data.Tags["effectivenessCacheValue"] = effectiveness;
+
+            return effectiveness;
+        }
+
+        private string GetCellDataEffectiveness(AttackType Data)
+        {
+            return GetAAEffectiveness(Data).ToString("P1");
+        }
+
+        private string GetSqlDataEffectiveness(AttackType Data)
+        {
+            return GetAAEffectiveness(Data).ToString("P1");
+        }
+
+        private int AttackTypeCompareEffectiveness(AttackType Left, AttackType Right)
+        {
+            return GetAAEffectiveness(Left).CompareTo(GetAAEffectiveness(Right));
+        }
+
+        private string GetCellDataFlankDamPrec(CombatantData Data)
+        {
+            return GetCellDataFlankPrec(Data.Items["Outgoing Damage"]);
+        }
+
+        private string GetSqlDataFlankDamPrec(CombatantData Data)
+        {
+            return GetSqlDataFlankPrec(Data.Items["Outgoing Damage"]);
+        }
+
+        private int CDCompareFlankDamPrec(CombatantData Left, CombatantData Right)
+        {
+            return GetDTFlankPrecValue(Left.Items["Outgoing Damage"]).CompareTo(GetDTFlankPrecValue(Right.Items["Outgoing Damage"]));
+        }
+
+        private string GetCellDataDmgEffectPrec(CombatantData Data)
+        {
+            return GetCellDataEffectiveness(Data.Items["Outgoing Damage"]);
+        }
+
+        private string GetSqlDataDmgEffectPrec(CombatantData Data)
+        {
+            return GetSqlDataEffectiveness(Data.Items["Outgoing Damage"]);
+        }
+
+        private int CDCompareDmgEffectPrec(CombatantData Left, CombatantData Right)
+        {
+            return GetDTEffectivenessValue(Left.Items["Outgoing Damage"]).CompareTo(GetDTEffectivenessValue(Right.Items["Outgoing Damage"]));
+        }
+
+        private string GetCellDataDmgTakenEffectPrec(CombatantData Data)
+        {
+            return GetCellDataEffectiveness(Data.Items["Incoming Damage"]);
+        }
+
+        private string GetSqlDataDmgTakenEffectPrec(CombatantData Data)
+        {
+            return GetSqlDataEffectiveness(Data.Items["Incoming Damage"]);
+        }
+
+        private int CDCompareDmgTakenEffectPrec(CombatantData Left, CombatantData Right)
+        {
+            return GetDTEffectivenessValue(Left.Items["Incoming Damage"]).CompareTo(GetDTEffectivenessValue(Right.Items["Incoming Damage"]));
+        }
+
+        private void FixupCombatDataStructures()
+        {
+            // - Remove data types that do not apply to Neverwinter combat logs.
+            // - Display fixed point int for damage since ACT using integer damage and Neverwinter uses floating.
+            // - TODO: Finish export vars cleanups.
+
+            EncounterData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
+            EncounterData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.DPS / 10).ToString(GetFloatCommas()); };
+
+            EncounterData.ExportVariables.Remove("maxhealward");
+            EncounterData.ExportVariables.Remove("MAXHEALWARD");
+            EncounterData.ExportVariables.Remove("powerdrain");
+
+            CombatantData.ColumnDefs.Remove("PowerDrain");
+            CombatantData.ColumnDefs.Remove("Threat +/-");
+            CombatantData.ColumnDefs.Remove("ThreatDelta");
+
+            CombatantData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
+            CombatantData.ColumnDefs["Healed"].GetCellData = (Data) => { return (Data.Healed / 10).ToString(GetIntCommas()); };
+            CombatantData.ColumnDefs["DPS"].GetCellData = (Data) => { return (Data.DPS / 10).ToString(GetFloatCommas()); };
+            CombatantData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.EncDPS / 10).ToString(GetFloatCommas()); };
+            CombatantData.ColumnDefs["EncHPS"].GetCellData = (Data) => { return (Data.EncHPS / 10).ToString(GetFloatCommas()); };
+            CombatantData.ColumnDefs["HealingTaken"].GetCellData = (Data) => { return (Data.HealsTaken / 10).ToString(GetIntCommas()); };
+            CombatantData.ColumnDefs["DamageTaken"].GetCellData = (Data) => { return (Data.DamageTaken / 10).ToString(GetIntCommas()); };
+
+            CombatantData.ColumnDefs.Add("FlankDam%",
+                new CombatantData.ColumnDef("FlankDam%", false, "VARCHAR(8)", "FlankDamPrec", GetCellDataFlankDamPrec, GetSqlDataFlankDamPrec, CDCompareFlankDamPrec));
+            CombatantData.ColumnDefs.Add("DmgEffect%",
+                new CombatantData.ColumnDef("DmgEffect%", false, "VARCHAR(8)", "DmgEffectPrec", GetCellDataDmgEffectPrec, GetSqlDataDmgEffectPrec, CDCompareDmgEffectPrec));
+            CombatantData.ColumnDefs.Add("DmgTakenEffect%",
+                new CombatantData.ColumnDef("DmgTakenEffect%", false, "VARCHAR(8)", "DmgTakenEffectPrec", GetCellDataDmgTakenEffectPrec, GetSqlDataDmgTakenEffectPrec, CDCompareDmgTakenEffectPrec));
+
+
+            CombatantData.OutgoingDamageTypeDataObjects.Remove("Auto-Attack (Out)");
+            CombatantData.OutgoingDamageTypeDataObjects.Remove("Skill/Ability (Out)");
+            CombatantData.OutgoingDamageTypeDataObjects.Remove("Power Drain (Out)");
+            CombatantData.OutgoingDamageTypeDataObjects.Remove("Threat (Out)");
+
+            CombatantData.IncomingDamageTypeDataObjects.Remove("Power Drain (Inc)");
+            CombatantData.IncomingDamageTypeDataObjects.Remove("Threat (Inc)");
+
+            CombatantData.SwingTypeToDamageTypeDataLinksOutgoing[1].RemoveAt(0);
+            CombatantData.SwingTypeToDamageTypeDataLinksOutgoing[2].RemoveAt(0);
+            CombatantData.SwingTypeToDamageTypeDataLinksOutgoing.Remove(10);
+            CombatantData.SwingTypeToDamageTypeDataLinksOutgoing.Remove(16);
+
+            CombatantData.SwingTypeToDamageTypeDataLinksIncoming.Remove(10);
+            CombatantData.SwingTypeToDamageTypeDataLinksIncoming.Remove(16);
+
+            CombatantData.ExportVariables.Remove("threatstr");
+            CombatantData.ExportVariables.Remove("threatdelta");
+            CombatantData.ExportVariables.Remove("maxhealward");
+            CombatantData.ExportVariables.Remove("MAXHEALWARD");
+
+            DamageTypeData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
+            DamageTypeData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.EncDPS / 10.0).ToString(GetFloatCommas()); };
+            DamageTypeData.ColumnDefs["CharDPS"].GetCellData = (Data) => { return (Data.CharDPS / 10.0).ToString(GetFloatCommas()); };
+            DamageTypeData.ColumnDefs["DPS"].GetCellData = (Data) => { return (Data.DPS / 10.0).ToString(GetFloatCommas()); };
+            DamageTypeData.ColumnDefs["Average"].GetCellData = (Data) => { return (Data.Average / 10.0).ToString(GetFloatCommas()); };
+            DamageTypeData.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
+            DamageTypeData.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
+            DamageTypeData.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
+            DamageTypeData.ColumnDefs.Add("FlankHits", 
+                new DamageTypeData.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits));
+            DamageTypeData.ColumnDefs.Add("Flank%",
+                new DamageTypeData.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec)); 
+            DamageTypeData.ColumnDefs.Add("Effectiveness",
+                new DamageTypeData.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness));
+
+            AttackType.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
+            AttackType.ColumnDefs["EncDPS"].GetCellData = (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); };
+            AttackType.ColumnDefs["CharDPS"].GetCellData = (Data) => { return Data.CharDPS.ToString(GetFloatCommas()); };
+            AttackType.ColumnDefs["DPS"].GetCellData = (Data) => { return Data.DPS.ToString(GetFloatCommas()); };
+            AttackType.ColumnDefs["Average"].GetCellData = (Data) => { return (Data.Average / 10).ToString(GetIntCommas()); };
+            AttackType.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
+            AttackType.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
+            AttackType.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
+            AttackType.ColumnDefs.Add("FlankHits",
+                new AttackType.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits, AttackTypeCompareFlankHits));
+            AttackType.ColumnDefs.Add("Flank%",
+                new AttackType.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec, AttackTypeCompareFlankPrec));
+            AttackType.ColumnDefs.Add("Effectiveness",
+                new AttackType.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness, AttackTypeCompareEffectiveness));
+
+            MasterSwing.ColumnDefs["Damage"] =
+                new MasterSwing.ColumnDef("Damage", true, "VARCHAR(128)", "DamageString", GetCellDataDamage, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); });
+
+            MasterSwing.ColumnDefs.Add("Flank", 
+                new MasterSwing.ColumnDef("Flank", true, "CHAR(1)", "Flank", GetCellDataFlank, GetSqlDataFlank, MasterSwingCompareFlank));
+
+            MasterSwing.ColumnDefs.Add("BaseDamage",
+                new MasterSwing.ColumnDef("BaseDamage", true, "INT", "BaseDamageString", GetCellDataBaseDamage, GetSqlDataBaseDamage, MasterSwingCompareBaseDamage));
+
+            MasterSwing.ColumnDefs.Add("Effectiveness",
+                new MasterSwing.ColumnDef("Effectiveness", true, "VARCHAR(8)", "EffectivenessString", GetCellDataEffectiveness, GetSqlDataEffectiveness, MasterSwingCompareEffectiveness));
+
+            ActGlobals.oFormActMain.ValidateLists();
+            ActGlobals.oFormActMain.ValidateTableSetup();
+        }
+
+        void oFormActMain_LogFileChanged(bool IsImport, string NewLogFileName)
+        {
             curActionTime = DateTime.MinValue;
             purgePetCache();
             magicMissileLastHit.Clear();
         }
 
-        void oFormActMain_OnCombatEnd(bool isImport, CombatToggleEventArgs encounterInfo) {
+        void oFormActMain_OnCombatEnd(bool isImport, CombatToggleEventArgs encounterInfo)
+        {
             curActionTime = DateTime.MinValue;
 
             // Don't actually want this.  Maybe on zone changes.
@@ -337,24 +852,38 @@ namespace Parsing_Plugin {
             magicMissileLastHit.Clear();
         }
 
-        private void purgePetCache() {
+        private void purgePetCache()
+        {
             petPlayerCache.Clear();
             playerPetCache.Clear();
         }
 
         // Must match LogLineEventDelegate signature
-        void oFormActMain_BeforeLogLineRead(bool isImport, LogLineEventArgs logInfo) {
-            if (logInfo.logLine.Length < 30 || logInfo.logLine[19] != ':' || logInfo.logLine[20] != ':') {
+        void oFormActMain_BeforeLogLineRead(bool isImport, LogLineEventArgs logInfo)
+        {
+            parsedLineCount++;
+
+            if (logInfo.logLine.Length < 30 || logInfo.logLine[19] != ':' || logInfo.logLine[20] != ':')
+            {
+                logInfo.detectedType = Color.DarkGray.ToArgb();
+                errorLineCount++;
                 return;
             }
 
-            if (logInfo.detectedTime != curActionTime) {
+            if (logInfo.detectedTime != curActionTime)
+            {
                 // Different times mean new action block, any pending actions won't be related to those of the new block
-                // parseDelayedActions(true);
                 curActionTime = logInfo.detectedTime;
             }
 
             ParsedLine pl = new ParsedLine(logInfo);
+
+            if (pl.error)
+            {
+                logInfo.detectedType = Color.DarkGray.ToArgb();
+                errorLineCount++;
+                return;
+            }
 
             // Fix up the ParsedLine to be easy to process.
             processOwnerSourceTarget(pl);
@@ -502,7 +1031,7 @@ namespace Parsing_Plugin {
                         playerPetCache.Remove(line.ownInt);
                         petPlayerCache.Remove(petInfo.petInt);
                     }
-                    
+
                     add = true;
                 }
 
@@ -530,7 +1059,7 @@ namespace Parsing_Plugin {
                     line.tgtPetInfo = petOwner;
                 }
             }
-            else if (line.tgtEntityType == EntityType.Pet) 
+            else if (line.tgtEntityType == EntityType.Pet)
             {
                 // If a Pet then get the owner info..
                 // The pet status was set via a '*' in the target...
@@ -547,99 +1076,119 @@ namespace Parsing_Plugin {
                 }
             }
         }
-        
+
 
         private void processNames(ParsedLine line)
         {
             switch (line.srcEntityType)
             {
                 case EntityType.Player:
-                {
-                    line.encAttackerName = line.srcDsp;
-                    line.unitAttackerName = line.srcDsp;
-                    break;
-                }
+                    {
+                        line.encAttackerName = line.srcDsp;
+                        line.unitAttackerName = line.srcDsp;
+                        break;
+                    }
 
                 case EntityType.Pet:
-                {
-                    // Use the pet owner name for encounter name and filtering.
-                    line.encAttackerName = line.ownDsp;
-
-                    // Pet name:
-                    line.unitAttackerName = line.srcDsp + " [" + line.ownDsp + "'s Pet]";
-                    if (this.checkBox_mergePets.Checked)
                     {
-                        line.unitAttackerName = line.ownDsp;
+                        // Use the pet owner name for encounter name and filtering.
+                        line.encAttackerName = line.ownDsp;
+
+                        // Pet name:
+                        line.unitAttackerName = line.srcDsp + " [" + line.ownDsp + "'s Pet]";
+                        if (this.checkBox_mergePets.Checked)
+                        {
+                            line.unitAttackerName = line.ownDsp;
+                        }
+                        break;
                     }
-                    break;
-                }
 
                 case EntityType.Creature:
-                {
-                    line.encAttackerName = line.srcDsp;
-                    String creatureId = line.srcInt.Split()[0].Substring(2);
-                    line.unitAttackerName = line.srcDsp + " [" + creatureId + "]";
-                    break;
-                }
+                    {
+                        line.encAttackerName = line.srcDsp;
+                        String creatureId = line.srcInt.Split()[0].Substring(2);
+
+                        if (checkBox_mergeNPC.Checked)
+                        {
+                            // Merge all NPCs to a single name.
+                            line.unitAttackerName = line.srcDsp;
+                        }
+                        else
+                        {
+                            // Separate each NPC with its unique creature ID added.
+                            line.unitAttackerName = line.srcDsp + " [" + creatureId + "]";
+                        }
+                        break;
+                    }
 
                 // case ParsedLine.EntityType.Unknown:
                 default:
-                {
-                    // Use the defaults.
-                    break;
-                }
+                    {
+                        // Use the defaults.
+                        break;
+                    }
             }
 
             switch (line.tgtEntityType)
             {
                 case EntityType.Player:
-                {
-                    line.encTargetName = line.tgtDsp;
-                    line.unitTargetName = line.tgtDsp;
-                    break;
-                }
+                    {
+                        line.encTargetName = line.tgtDsp;
+                        line.unitTargetName = line.tgtDsp;
+                        break;
+                    }
 
                 case EntityType.Pet:
-                {
-                    // Use the pet owner name for encounter name and filtering.
-                    line.encTargetName = line.tgtPetInfo.ownerDsp;
-
-                    // Pet name:
-                    line.unitTargetName = line.tgtDsp + " [" + line.tgtPetInfo.ownerDsp + "'s Pet]";
-                    if (this.checkBox_mergePets.Checked)
                     {
-                        line.unitTargetName = line.tgtPetInfo.ownerDsp;
+                        // Use the pet owner name for encounter name and filtering.
+                        line.encTargetName = line.tgtPetInfo.ownerDsp;
+
+                        // Pet name:
+                        line.unitTargetName = line.tgtDsp + " [" + line.tgtPetInfo.ownerDsp + "'s Pet]";
+                        if (this.checkBox_mergePets.Checked)
+                        {
+                            line.unitTargetName = line.tgtPetInfo.ownerDsp;
+                        }
+                        break;
                     }
-                    break;
-                }
 
                 case EntityType.Creature:
-                {
-                    
-                    if (line.tgtInt.Contains("Trickster_Baitandswitch"))
                     {
-                        // Bait and Switch
-                        // 13:07:09:21:57:26.9::Dracnia,P[200787912@7184553 Dracnia@tminhtran],,*,Lodur,C[215 Trickster_Baitandswitch],Lashing Blade,Pn.Gji3ar1,Physical,Critical|Flank|Kill,14778.6,15481.4
-                        // Not a pet...
 
-                        line.encTargetName = line.tgtDsp;
-                        line.unitTargetName = "Trickster [" + line.tgtDsp + "]";
+                        if (line.tgtInt.Contains("Trickster_Baitandswitch"))
+                        {
+                            // Bait and Switch
+                            // 13:07:09:21:57:26.9::Dracnia,P[200787912@7184553 Dracnia@tminhtran],,*,Lodur,C[215 Trickster_Baitandswitch],Lashing Blade,Pn.Gji3ar1,Physical,Critical|Flank|Kill,14778.6,15481.4
+                            // Not a pet...
+
+                            line.encTargetName = line.tgtDsp;
+                            line.unitTargetName = "Trickster [" + line.tgtDsp + "]";
+                        }
+                        else
+                        {
+                            line.encTargetName = line.tgtDsp;
+                            String creatureId = line.tgtInt.Split()[0].Substring(2);
+
+                            if (checkBox_mergeNPC.Checked)
+                            {
+                                // Merge all NPCs to a single name.
+                                line.unitTargetName = line.tgtDsp;
+                            }
+                            else
+                            {
+                                // Separate each NPC with its unique creature ID added.
+                                line.unitTargetName = line.tgtDsp + " [" + creatureId + "]";
+                            }
+                        }
+                        break;
                     }
-                    else
-                    {
-                        line.encTargetName = line.tgtDsp;
-                        String creatureId = line.tgtInt.Split()[0].Substring(2);
-                        line.unitTargetName = line.tgtDsp + " [" + creatureId + "]";
-                    }
-                    break;
-                }
 
                 // case ParsedLine.EntityType.Unknown:
                 default:
-                {
-                    // Use the defaults.
-                    break;
-                }
+                    {
+                        // Use the defaults.
+                        break;
+                    }
             }
         }
 
@@ -647,7 +1196,7 @@ namespace Parsing_Plugin {
         {
 
             // add action Killing
-            if (l.flags.Contains("Kill"))
+            if (l.kill)
             {
                 return Color.Fuchsia;
             }
@@ -657,7 +1206,7 @@ namespace Parsing_Plugin {
                 return Color.Aqua;
             }
 
-            if (l.flags.Contains("Miss") || l.flags.Contains("Dodge") || l.flags.Contains("Immune"))
+            if (l.flags.Contains("Miss") || l.dodge || l.immune)
             {
                 return Color.Blue;
             }
@@ -688,10 +1237,7 @@ namespace Parsing_Plugin {
             }
             else
             {
-
-                int mag = (int)Math.Round(l.mag);
                 int magBase = (int)Math.Round(l.magBase);
-                int mitigated = magBase = mag;
 
                 if (magBase > 0)
                 {
@@ -712,6 +1258,9 @@ namespace Parsing_Plugin {
 
         private void processAction(ParsedLine l)
         {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
             // Basic attack, magnitude is actual damage dealt taking resists/buffs/debuffs/critical into account, magnitudeBase is damage without these 
             if (l.evtInt == "Pn.Vklp251")
             {
@@ -737,7 +1286,7 @@ namespace Parsing_Plugin {
                         {
                             ActGlobals.oFormActMain.AddCombatAction(
                                 (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
-                                "PVP Heal Rune", new Dnum((int)Math.Round(-l.mag)), l.logInfo.detectedTime,
+                                "PVP Heal Rune", new Dnum(-magAdj), l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
                     }
@@ -766,7 +1315,7 @@ namespace Parsing_Plugin {
                         {
                             ActGlobals.oFormActMain.AddCombatAction(
                                 (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
-                                l.evtDsp, new Dnum((int)Math.Round(-l.mag)), l.logInfo.detectedTime,
+                                l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
                     }
@@ -796,7 +1345,7 @@ namespace Parsing_Plugin {
                             {
                                 ActGlobals.oFormActMain.AddCombatAction(
                                     (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, cgi.unitName,
-                                    l.evtDsp, new Dnum((int)Math.Round(-l.mag)), l.logInfo.detectedTime,
+                                    l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
                                     l.ts, l.unitTargetName, l.type);
                             }
 
@@ -810,7 +1359,7 @@ namespace Parsing_Plugin {
                             {
                                 ActGlobals.oFormActMain.AddCombatAction(
                                     (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, l.unitTargetName,
-                                    l.evtDsp, new Dnum((int)Math.Round(-l.mag)), l.logInfo.detectedTime,
+                                    l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
                                     l.ts, l.unitTargetName, l.type);
                             }
                         }
@@ -818,7 +1367,7 @@ namespace Parsing_Plugin {
                     else
                     {
                         // Default heal.
-                        addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum((int)Math.Round(-l.mag)), l.type);
+                        addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
                     }
                 }
             }
@@ -826,10 +1375,16 @@ namespace Parsing_Plugin {
             {
                 // Shielding goes first and acts like a heal to cancel coming damage.  Attacker has his own damage line.  example:
 
-// 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Shield,,-349.348,-154.608
-// 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Shield,,-559.613,-247.663
-// 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Radiant,,154.608,349.348
-// 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Arcane,,247.663,559.613
+                // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Shield,,-349.348,-154.608
+                // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Shield,,-559.613,-247.663
+                // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Radiant,,154.608,349.348
+                // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Arcane,,247.663,559.613
+
+                // NOTE:
+                // Notice that the mag and magBase numbers are swap in the shield line verse the damage line.
+                // Therefore the amount shield == magBase ???
+                // The mag is meaningless ???
+                // If mag > magBase on the attack is all damage not shielded ???  (ie high armor pen)
 
                 //
                 // Target prevented damage.
@@ -843,7 +1398,7 @@ namespace Parsing_Plugin {
 
                     ActGlobals.oFormActMain.AddCombatAction(
                         (int)SwingTypeEnum.Healing, false, special, l.unitTargetName,
-                        l.type, new Dnum((int)Math.Round(-l.mag)), l.logInfo.detectedTime,
+                        l.type, new Dnum(-magBaseAdj), l.logInfo.detectedTime,
                         l.ts, l.unitTargetName, "HitPoints");
                 }
             }
@@ -865,14 +1420,14 @@ namespace Parsing_Plugin {
                         {
                             ActGlobals.oFormActMain.AddCombatAction(
                                 (int)SwingTypeEnum.PowerHealing, l.critical, "", "Trickster [" + l.tgtDsp + "]",
-                                "Bait and Switch", new Dnum((int)Math.Round(-l.mag)), l.logInfo.detectedTime,
+                                "Bait and Switch", new Dnum(-magAdj), l.logInfo.detectedTime,
                                 l.ts, l.tgtDsp, l.type);
                         }
                     }
                     else
                     {
                         // Normal Power case...
-                        addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum((int)Math.Round(-l.mag)), l.type);
+                        addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
                     }
                 }
             }
@@ -880,19 +1435,15 @@ namespace Parsing_Plugin {
             {
                 if (ActGlobals.oFormActMain.InCombat)
                 {
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, (int)Math.Round(l.mag), l.type);
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
                 }
             }
             else
             {
                 //handle the rest
                 //addCombatAction(l.logInfo.detectedTime, tempOwnerDsp, tempTargetDsp, l.swingType, l.critical, l.special, l.attackType, (int)Math.Round(l.mag), l.type, l.ts);
-                
-                int mag = (int)Math.Round(l.mag);
-                int magBase = (int)Math.Round(l.magBase);
-                int mitigated = magBase = mag;
 
-                if ((l.evtInt == "Pn.3t6cw8") && (magBase > 0)) // Magic Missile
+                if ((l.evtInt == "Pn.3t6cw8") && (magBaseAdj > 0)) // Magic Missile
                 {
                     ChaoticGrowthInfo cgi = null;
                     if (magicMissileLastHit.TryGetValue(l.unitTargetName, out cgi))
@@ -925,24 +1476,44 @@ namespace Parsing_Plugin {
                     }
                 }
 
-                if (l.flags.Contains("Miss") || l.flags.Contains("Dodge") || l.flags.Contains("Immune"))
+                if (magBaseAdj > 0)
                 {
-                    // Handle Miss and Dodge
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type);
+
+                    if (l.flags.Contains("Miss"))
+                    {
+                        // TODO:  Not sure I have ever seen a "miss" in a log.  This actually valid?
+                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type, magBaseAdj);
+                    }
+                    else if (l.immune)
+                    {
+                        // Generally damaging attacks have mag=0 and magBase > 0 when Immune.
+                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type, magBaseAdj);
+                    }
+                    else if (l.dodge)
+                    {
+                        // It really looks like Dodge does not stop all damage - just reduces it by about 80%...
+                        // I have seen damaging attacks that are both Dodge and Kill in the flags.  
+                        // So the target dodged but still died.
+                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                    }
+                    else
+                    {
+                        // All attacks have a magBase.
+                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                    }
                 }
-                else if (magBase > 0)
+                else
                 {
-                    // All attacks have a magBase.
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, mag, l.type);
+                    unknownLineCount++;
                 }
             }
 
             // add action Killing
-            if (l.flags.Contains("Kill"))
+            if (l.kill)
             {
                 // Clean from last MM hit.
                 magicMissileLastHit.Remove(l.unitTargetName);
-                
+
                 // TODO: use tgtDsp or unitTargetName?
                 ActGlobals.oFormSpellTimers.RemoveTimerMods(l.tgtDsp);
                 ActGlobals.oFormSpellTimers.DispellTimerMods(l.tgtDsp);
@@ -962,199 +1533,59 @@ namespace Parsing_Plugin {
             }
         }
 
-        /*
-        private void parseDelayedActions(bool parseUnmatched) {
-            int i = 0;
-            while (i < delayedActions.Count) {
-                ParsedLine l = delayedActions[i];
-                bool parsed = false;
-                //bool isPetAction = l.srcInt.CompareTo(l.ownInt) != 0 && !l.npcOwner;
-                // For attacks absorbed by Shields, the owner is the actual damage source, the logged source is the attack target.
-                // We need to know which player spawned the pet in order to record his indirect damage, but we won't know that until the pet hits hull.
-                // So for now all pet shield damage before first hull hit is attributed to the pet, which sucks for mines since they only have one shot.
-                //string realSrcInt = l.srcInt, realSrcDsp = l.srcDsp, realOwnDsp = l.ownDsp;
-                //bool ignorePet =  l.type.Equals("Radiation") || l.type.Equals("Electrical") || l.attackType.Equals("Hargh'Peng Torpedo Secondary Detonation") || l.attackType.Contains("Ramming Speed");
-                //if (!realSrcInt.Equals(unkInt)) {
-                //    if (!ignorePet && isPetAction) {
-                        // When a player pet hits the hull of something, store pet-player relationship for later lookups
-                //        if (!petPlayerCache.ContainsKey(realSrcInt)) {
-                //            petPlayerCache.Add(realSrcInt, realOwnDsp);
-                //        }
-                //    }
-				//	if (ignorePet || l.npcOwner) {
-                        // Potential pet shield attack, try to find actual owner
-                 //       if (petPlayerCache.ContainsKey(l.ownInt)) {
-                 //           realSrcInt = l.ownInt;
-                 //           realSrcDsp = l.ownDsp;
-                 //           realOwnDsp = petPlayerCache[l.ownInt];
-                 //           ignorePet = false;
-                 //           isPetAction = true;
-                 //       } else {
-                            // Owner yet unknown. We look ahead in current action lines to see if we have a matching hull damage to guess owner
-                  //          bool found = false;
-                 //           for (int j = i+1; j < delayedActions.Count; j++) {
-                 //               ParsedLine p = delayedActions[j];
-                 //               if (!p.npcOwner && p.srcInt == l.ownInt && p.evtInt == l.evtInt && p.tgtInt == l.tgtInt) {
-                                    // Match when owner is a player, same event type, same target, and match source is equal to current line owner
-                  //                  realSrcInt = l.ownInt;
-                 //                   realSrcDsp = l.ownDsp;
-                  //                  realOwnDsp = p.ownDsp;
-                  //                  ignorePet = false;
-                  //                  isPetAction = true;
-                  //                  petPlayerCache.Add(realSrcInt, p.ownDsp);
-                  //                  found = true;
-                  //                  break;
-                  //              }
-                  //          }
-                  //          if (!found) {
-                  //              matched = false;
-                  //          }
-                  //      }
-                  //  }
-                //}
-				//if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, tempOwnerDsp, victim))
-				
-				
-                if (parseUnmatched) {
-					string tempTargetDsp = l.tgtDsp;
-					string tempOwnerDsp = l.ownDsp;
-					//int tempSwingType = l.SwingType;
-					
-	
-					
-                    
-                    // Basic attack, magnitude is actual damage dealt taking resists/buffs/debuffs/critical into account, magnitudeBase is damage without these 
-					if (l.flags.Contains("Miss") || l.flags.Contains("Dodge")) {
-						//handle Miss and Dodge
-						addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type);
-					} else if (l.evtInt == "Pn.Vklp251") {
-                        if (ActGlobals.oFormActMain.InCombat)
-                        {
-                            //handle cleanse   "Reinigen/Cleanse"
-                            addCombatAction(l, (int)SwingTypeEnum.CureDispel, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
-                        }
-					} else if (l.type == "HitPoints") {
-                        // Heals can not start an encounter.
-                        if (ActGlobals.oFormActMain.InCombat)
-                        {
-                            if (l.evtInt != "Pn.Dbm4um1" && l.evtInt != "Pn.Qiwkdx1")
-                            { //not eq "Lagerfeuer" and "Aufsteigen"
-                                addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum((int)Math.Round(-l.mag)), l.type);
-                            }
-						}
-                    } else if (l.type == "Shield")
-                    {
-                        // "13:07:02:10:47:32.3::Lodur,P[201093074@7545190 Lodur@lodur42],,*,Ashurbanipal,P[201073234@7521465 Ashurbanipal@kolkotel],Sly Flourish,Pn.Pcrgk5,Shield,,-256.14,-142.802"
-                        
-                        // 
-
-                        //
-                        // addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum((int)Math.Round(-l.mag)), l.type);
-                        
-                        // Attacker did no damage.
-                        string blocked = "Blocked: " + ((int)Math.Round(l.mag)).ToString();
-                        addCombatAction(l, l.swingType, l.critical, blocked, l.attackType, Dnum.NoDamage, "Unknown");
-
-                        //
-                        // Target prevented damage.
-                        //
-
-                        // Use encounter names attacker and target here.  This allows filtering
-                        if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
-                        {
-                            // add Flank to AttackType if setting is set
-                            string tempAttack = l.attackType;
-                            if (l.special == "Flank" && !this.checkBox_flankSkill.Checked) tempAttack = l.attackType + ": Flank";
-
-                            ActGlobals.oFormActMain.AddCombatAction(
-                                (int)SwingTypeEnum.Healing, false, "", l.unitTargetName,
-                                tempAttack, new Dnum((int)Math.Round(-l.mag)), l.logInfo.detectedTime,
-                                l.ts, l.unitTargetName, l.type);
-                        }
-
-
-					} else if (l.type == "Power" ) {
-                        if (ActGlobals.oFormActMain.InCombat)
-                        {
-                            // TODO: Power replenish; shall not be inc damage; check !!
-                            addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum((int)Math.Round(-l.mag)), l.type);
-                        }
-					} else if (l.evtInt == "Autodesc.Combatevent.Falling") {
-                        if (ActGlobals.oFormActMain.InCombat)
-                        {
-                            addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, (int)Math.Round(l.mag), l.type);
-                        }
-                    } else {
-						//handle the rest
-						//addCombatAction(l.logInfo.detectedTime, tempOwnerDsp, tempTargetDsp, l.swingType, l.critical, l.special, l.attackType, (int)Math.Round(l.mag), l.type, l.ts);
-                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, (int)Math.Round(l.mag), l.type);
-					}
-                 
-					// add action Killing
-					if (l.flags.Contains("Kill")) {
-							addCombatAction(l, l.swingType, l.critical, l.special, "Killing", Dnum.Death, l.type);
-                            
-					}
-                    parsed = true;
-                }
-
-                if (parsed) {
-                    delayedActions.RemoveAt(i);
-                } else {
-                    i++;
-                }
-            }
-            if (parseUnmatched) {
-                delayedActions.Clear();
-            }
-        }
-         * */
-
-		/*
-		private void addCombatAction(DateTime Time, string attacker, string victim, int swingType, bool critical, string special, string theAttackType, Dnum Damage, string theDamageType, int ts) {
-            if (ActGlobals.oFormActMain.SetEncounter(Time, attacker, victim)) {
-				
-                // add Flank to AttackType if setting is set
-                string tempAttack = theAttackType;
-				if (special == "Flank" && !this.checkBox_flankSkill.Checked) tempAttack = theAttackType + ": " + special;
-
-                ActGlobals.oFormActMain.AddCombatAction(swingType, critical, special, attacker, tempAttack, Damage, Time, ts, victim, theDamageType);
-            }
-        }
-        */
-
         private void addCombatAction(
-            ParsedLine line, int swingType, bool critical, string special, string theAttackType, Dnum Damage, string theDamageType)
+            ParsedLine line, int swingType, bool critical, string special, string theAttackType, Dnum Damage, string theDamageType, int baseDamage=0)
         {
             // Use encounter names attacker and target here.  This allows filtering
             if (ActGlobals.oFormActMain.SetEncounter(line.logInfo.detectedTime, line.encAttackerName, line.encTargetName))
             {
                 // add Flank to AttackType if setting is set
                 string tempAttack = theAttackType;
-                if (special == "Flank" && !this.checkBox_flankSkill.Checked) tempAttack = theAttackType + ": " + special;
+                if (line.flank && this.checkBox_flankSkill.Checked) tempAttack = theAttackType + ": Flank";
 
-                ActGlobals.oFormActMain.AddCombatAction(
-                    swingType, line.critical, special, line.unitAttackerName, 
-                    tempAttack, Damage, line.logInfo.detectedTime,
+                AddCombatAction(
+                    swingType, line.critical, line.flank, special, line.unitAttackerName,
+                    tempAttack, Damage, baseDamage, line.logInfo.detectedTime,
                     line.ts, line.unitTargetName, theDamageType);
             }
         }
 
+        private void AddCombatAction(
+            int swingType, bool critical, bool flank, string special, string attacker, string theAttackType, 
+            Dnum damage, int baseDamage,
+            DateTime time, int timeSorter, string victim, string theDamageType)
+        {
+            MasterSwing ms = new MasterSwing(swingType, critical, special, damage, time, timeSorter, theAttackType, attacker, theDamageType, victim);
+
+            ms.Tags.Add("BaseDamage", baseDamage);
+            ms.Tags.Add("Flank", flank);
+
+            if (baseDamage > 0)
+            {
+                double eff = (double)damage / (double)baseDamage;
+                ms.Tags.Add("Effectiveness", eff);
+            }
+
+            ActGlobals.oFormActMain.AddCombatAction(ms);
+        }
 
         // Must match the DateTimeLogParser delegate signature
-        private DateTime ParseDateTime(string FullLogLine) {
-            if (FullLogLine.Length >= 21 && FullLogLine[19] == ':' && FullLogLine[20] == ':') {
+        private DateTime ParseDateTime(string FullLogLine)
+        {
+            if (FullLogLine.Length >= 21 && FullLogLine[19] == ':' && FullLogLine[20] == ':')
+            {
                 return DateTime.ParseExact(FullLogLine.Substring(0, 19), "yy':'MM':'dd':'HH':'mm':'ss'.'f", System.Globalization.CultureInfo.InvariantCulture); ;
             }
             return ActGlobals.oFormActMain.LastKnownTime;
         }
 
-        public void DeInitPlugin() {
+        public void DeInitPlugin()
+        {
             ActGlobals.oFormActMain.BeforeLogLineRead -= oFormActMain_BeforeLogLineRead;
-			ActGlobals.oFormActMain.OnCombatEnd -= oFormActMain_OnCombatEnd;
+            ActGlobals.oFormActMain.OnCombatEnd -= oFormActMain_OnCombatEnd;
             ActGlobals.oFormActMain.LogFileChanged -= oFormActMain_LogFileChanged;
-			
-			if (optionsNode != null)
+
+            if (optionsNode != null)
             {
                 optionsNode.Remove();
                 ActGlobals.oFormActMain.OptionsControlSets.Remove(@"Neverwinter\General");
@@ -1165,40 +1596,48 @@ namespace Parsing_Plugin {
                 if (ActGlobals.oFormActMain.OptionsTreeView.Nodes[i].Text == "Neverwinter")
                     ActGlobals.oFormActMain.OptionsTreeView.Nodes[i].Remove();
             }
-            	
+
             //purgePetCache();
-			SaveSettings();
+            SaveSettings();
             lblStatus.Text = "Neverwinter ACT plugin unloaded";
         }
-		
-		// Load option settings from file
-		void LoadSettings() {
-            
-            xmlSettings.AddControlSetting(checkBox_filterAlly.Name, checkBox_filterAlly);
+
+        // Load option settings from file
+        void LoadSettings()
+        {
+
+            xmlSettings.AddControlSetting(checkBox_mergeNPC.Name, checkBox_mergeNPC);
             xmlSettings.AddControlSetting(checkBox_mergePets.Name, checkBox_mergePets);
             xmlSettings.AddControlSetting(checkBox_flankSkill.Name, checkBox_flankSkill);
- 
-            if (File.Exists(settingsFile)) {
+
+            if (File.Exists(settingsFile))
+            {
                 FileStream fs = new FileStream(settingsFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                 XmlTextReader xReader = new XmlTextReader(fs);
 
-                try {
-                    while (xReader.Read()) {
-                        if (xReader.NodeType == XmlNodeType.Element) {
-                            if (xReader.LocalName == "SettingsSerializer") {
+                try
+                {
+                    while (xReader.Read())
+                    {
+                        if (xReader.NodeType == XmlNodeType.Element)
+                        {
+                            if (xReader.LocalName == "SettingsSerializer")
+                            {
                                 xmlSettings.ImportFromXml(xReader);
                             }
                         }
                     }
                 }
-                catch (Exception ex) {
+                catch (Exception ex)
+                {
                     lblStatus.Text = "Error loading settings: " + ex.Message;
                 }
                 xReader.Close();
             }
         }
-		
-        void SaveSettings() {
+
+        void SaveSettings()
+        {
             FileStream fs = new FileStream(settingsFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
             XmlTextWriter xWriter = new XmlTextWriter(fs, Encoding.UTF8);
             xWriter.Formatting = Formatting.Indented;
@@ -1214,7 +1653,7 @@ namespace Parsing_Plugin {
             xWriter.Flush();	// Flush the file buffer to disk
             xWriter.Close();
         }
-		
+
     }
 
     internal class PetInfo
@@ -1242,18 +1681,19 @@ namespace Parsing_Plugin {
     }
 
     // Pre-parsed line
-    internal class ParsedLine {
+    internal class ParsedLine
+    {
 
         public LogLineEventArgs logInfo;
 
         //
         // Parsed from the line.
         //
-        
+
         public String ownDsp, ownInt, srcDsp, srcInt, tgtDsp, tgtInt, evtDsp, evtInt;
         public String type, attackType, special, flags;
         public int swingType, ts;
-        public bool critical;
+        public bool critical, flank, dodge, immune, kill;
         public float mag, magBase;
         public bool error;
 
@@ -1278,10 +1718,11 @@ namespace Parsing_Plugin {
 
 
 
-        public ParsedLine(LogLineEventArgs logInfo) {
-		//    Time            ::   ownDsp  ,                ownInt                   ,       srcDsp     ,      srcInt          ,   tgtDsp  ,           tgtInt                        ,evtDsp,  evtInt  ,type ,flags,mag,magBase
-		// 13:03:22:20:16:32.6::Ameise-22  ,P[100083146@5846877 Ameise@antday]       ,Morsches Skelett-1,C[6261 Skeleton_Basic],Ameise-22  ,P[100083146@5846877 Ameise@antday]       ,Wache ,Pn.Jy04um1,Power,Kill ,-0 ,0
-        // 13:07:08:14:57:31.4::Wolf       ,C[42358 Monster_Wolf]                    ,                  ,*                     ,Fiolnir    ,P[201259732@7545190 Fiolnir@lodur42]     ,Bite  ,Pn.Lp6b6g1,Physical,Flank,43.4474,47.6017
+        public ParsedLine(LogLineEventArgs logInfo)
+        {
+            //    Time            ::   ownDsp  ,                ownInt                   ,       srcDsp     ,      srcInt          ,   tgtDsp  ,           tgtInt                        ,evtDsp,  evtInt  ,type ,flags,mag,magBase
+            // 13:03:22:20:16:32.6::Ameise-22  ,P[100083146@5846877 Ameise@antday]       ,Morsches Skelett-1,C[6261 Skeleton_Basic],Ameise-22  ,P[100083146@5846877 Ameise@antday]       ,Wache ,Pn.Jy04um1,Power,Kill ,-0 ,0
+            // 13:07:08:14:57:31.4::Wolf       ,C[42358 Monster_Wolf]                    ,                  ,*                     ,Fiolnir    ,P[201259732@7545190 Fiolnir@lodur42]     ,Bite  ,Pn.Lp6b6g1,Physical,Flank,43.4474,47.6017
 
             this.logInfo = logInfo;
             this.ts = ++ActGlobals.oFormActMain.GlobalTimeSorter;
@@ -1298,8 +1739,8 @@ namespace Parsing_Plugin {
             flags = split[10];
             mag = float.Parse(split[11], NW_Parser.cultureLog);
             magBase = float.Parse(split[12], NW_Parser.cultureLog);
-            if (split.Length > 13 && split[13].CompareTo("EOF") == 0) {
-                // Ugly patch for last lines parsing, since there's no way to trigger parsing at end of file without NREs in ACT
+            if (split.Length != 13)
+            {
                 this.error = true;
             }
 
@@ -1307,7 +1748,7 @@ namespace Parsing_Plugin {
             srcEntityType = EntityType.Unknown;
             tgtEntityType = EntityType.Unknown;
 
-            
+
             // Defaults for the clean names.
             encAttackerName = srcDsp;
             encTargetName = tgtDsp;
@@ -1315,45 +1756,49 @@ namespace Parsing_Plugin {
             unitTargetName = tgtDsp;
 
 
-            if (flags.Contains("Critical")) {
-                critical = true;
-            }
-			// special attacks for Flank
-			special = "None";
-			if (flags.Contains("Flank")) {
-                special = "Flank";
-            }
-			
+            kill = critical = flank = dodge = immune = false;
+            if (flags.Length > 0)
+            {
+                int extraFlagCount = 0;
+                special = "None";
+                string[] sflags = flags.Split('|');
+                foreach (string sflag in sflags)
+                {
+                    switch (sflag)
+                    {
+                        case "Flank":
+                            flank = true;
+                            break;
+                        case "Critical":
+                            critical = true;
+                            break;
+                        case "Dodge":
+                            dodge = true;
+                            special = (extraFlagCount++ > 0) ? (special + " | " + sflag) : sflag;
+                            break;
+                        case "Immune":
+                            immune = true;
+                            special = (extraFlagCount++ > 0) ? (special + " | " + sflag) : sflag;
+                            break;
+                        case "Kill":
+                            kill = true;
+                            break;
 
-			//temp all Melee
+                        default:
+                            special = (extraFlagCount++ > 0) ? (special + " | " + sflag) : sflag;
+                            break;
+                    }
+                }
+            }
+
             swingType = (int)SwingTypeEnum.NonMelee;
-			// Das war früher "||" - wieder zurückgeändert
-            //if (npcOwner && npcSource) {
-            //    swingType = (int)SwingTypeEnum.NonMelee;
-            //}
 
             attackType = evtDsp;
-            if (attackType.Trim().Length == 0) {
+            if (attackType.Trim().Length == 0)
+            {
                 // Uggly fix for missing attack type
                 attackType = NW_Parser.unkAbility;
             }
-			//Special now used with Flank
-            //int pos = attackType.IndexOf(" - ");
-            //if (pos > 0) {
-            //    special = attackType.Substring(pos + 3, attackType.Length - pos - 3);
-            //    attackType = attackType.Substring(0, pos);
-            //}
-			//if (npcOwner || (npcSource && (mag>0)))
-			//{
-				//Pets als nonMelee anzeigne
-			//	swingType = (int)SwingTypeEnum.NonMelee;
-			//}
-        }
-
-        internal bool shouldDelayParse() {
-            // Currently we only need to delay parse shield damage when the damage owner is a pet whose owner is unknown
-            // return "Shield".Equals(type) && mag < 0 && magBase < 0 && npcOwner && !NW_Parser.petPlayerCache.ContainsKey(ownInt);
-            return false;
         }
     }
 }
