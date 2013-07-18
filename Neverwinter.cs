@@ -28,7 +28,7 @@ TODO:
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.7.2")]
+[assembly: AssemblyVersion("0.0.7.3")]
 
 /* Version History - npb
  * 0.0.7.0 - 2013/7/16
@@ -332,6 +332,14 @@ namespace Parsing_Plugin
             // Shard of the Endless Avalanche
             // 13:07:17:10:24:30.2::zoorhie,P[200847904@7204132 zoorhie@zeldanora13],Shard,C[620 Entity_Shardoftheendlessavalanche],Chloe Oralia,P[200802208@6132862 Chloe Oralia@alluriya],Shardplosion,Pn.7d13go,Arcane,,2283.86,3696.82
             ownerIsTheRealSource.Add("Pn.7d13go", true);
+
+            // Sudden Storm
+            // 13:07:17:15:28:58.7::Sharee,P[201240783@6333626 Sharee@baelzeden],Domination Point,C[131 Pvp_Capturepoint],Bishop,P[200705682@6899836 Bishop@daytak],Sudden Storm Arc,Pn.6c0tls,Lightning,,94.6794,202.771
+            ownerIsTheRealSource.Add("Pn.6c0tls", true);
+
+            // Sacred Flame
+            // 13:07:13:16:29:33.6::Kratos,P[200351767@6314814 Kratos@symon189],Infiltrator,C[111210 Mindflayer_Infiltrator],Kratos,P[200351767@6314814 Kratos@symon189],Sacred Flame,Pn.Ke4quc1,HitPoints,,-1390.32,0
+            ownerIsTheRealSource.Add("Pn.Ke4quc1", true);
         }
         
         private string GetIntCommas()
