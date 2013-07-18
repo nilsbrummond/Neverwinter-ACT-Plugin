@@ -583,7 +583,16 @@ namespace Parsing_Plugin
                     return flankCount;
                 }
             }
-
+            /*  BUG
+             *  	
+                [External Code]	
+	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetAAFlankValue(Advanced_Combat_Tracker.AttackType Data) Line 587 + 0xd8 bytes	C#
+ 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetDTFlankValue(Advanced_Combat_Tracker.DamageTypeData Data) Line 519 + 0xb bytes	C#
+ 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetDTFlankPrecValue(Advanced_Combat_Tracker.DamageTypeData Data) Line 536 + 0xb bytes	C#
+ 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.CDCompareFlankDamPrec(Advanced_Combat_Tracker.CombatantData Left, Advanced_Combat_Tracker.CombatantData Right) Line 717 + 0x32 bytes	C#
+ 	            [External Code]	
+             *
+             */
             foreach (MasterSwing ms in Data.Items)
             {
                 object fv;
