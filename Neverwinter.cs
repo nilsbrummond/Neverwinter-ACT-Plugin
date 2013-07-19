@@ -165,7 +165,11 @@ namespace Parsing_Plugin
         }
 
         internal static string[] separatorLog = new string[] { "::", "," };
-        internal static string unk = "[Unknown]", unkInt = "C[0 Unknown]", pet = "<PET> ", unkAbility = "Unknown Ability";
+
+        // NOTE: The values of "Unknown" and "UNKNOWN" short-circuit the ally determination code.  Must use one of these two names.
+        //       Information from EQAditu.
+        internal static string unk = "UNKNOWN", unkInt = "C[0 Unknown]", pet = "<PET> ", unkAbility = "Unknown Ability";
+
         internal static CultureInfo cultureLog = new CultureInfo("en-US");
 
         // This is for SQL syntax; do not change
@@ -593,8 +597,13 @@ namespace Parsing_Plugin
  	            [External Code]	
              *
              */
-            foreach (MasterSwing ms in Data.Items)
+
+            int count = Data.Items.Count;
+
+            for (int i=0; i<count; i++)
             {
+                MasterSwing ms = Data.Items[i];
+
                 object fv;
                 if ( ( ms.Damage > 0 ) && (ms.Tags.TryGetValue("Flank", out fv) ) )
                 {
@@ -603,7 +612,7 @@ namespace Parsing_Plugin
                 }
             }
 
-            Data.Tags["flankPrecCacheCount"] = Data.Items.Count;
+            Data.Tags["flankPrecCacheCount"] = count;
             Data.Tags["flankPrecCacheValue"] = flankCount;
 
             return flankCount;
@@ -673,8 +682,13 @@ namespace Parsing_Plugin
                 }
             }
 
-            foreach (MasterSwing ms in Data.Items)
+            
+            int count = Data.Items.Count;
+
+            for (int i=0; i<count; i++)
             {
+                MasterSwing ms = Data.Items[i];
+
                 object fv;
                 if (ms.Tags.TryGetValue("BaseDamage", out fv))
                 {
@@ -690,7 +704,7 @@ namespace Parsing_Plugin
 
             effectiveness = (double) dmgTotal / (double) baseDmgTotal;
 
-            Data.Tags["effectivenessCacheCount"] = Data.Items.Count;
+            Data.Tags["effectivenessCacheCount"] = count;
             Data.Tags["effectivenessCacheValue"] = effectiveness;
 
             return effectiveness;
@@ -1019,6 +1033,8 @@ namespace Parsing_Plugin
             // "13:07:09:11:01:59.5::Nasus king,P[201132249@7587600 Nasus king@portazorras],SerGay,C[265715 Pet_Clericdisciple],Target Dummy,C[265291 Entity_Targetdummy],Sacred Flame,Pn.Tegils,Physical,Flank,59.7605,0"
 
             bool exception = false;
+            bool add = false;
+            PetInfo petInfo = null;
 
             if (line.srcInt.Contains("Trickster_Baitandswitch"))
             {
@@ -1031,9 +1047,6 @@ namespace Parsing_Plugin
             // Record owner of all pets we see.
             if (line.srcEntityType == EntityType.Pet && (!exception))
             {
-                bool add = false;
-                PetInfo petInfo = null;
-
                 if (petPlayerCache.TryGetValue(line.srcInt, out petInfo))
                 {
                     if (petInfo.ownerInt != line.ownInt)
@@ -1283,8 +1296,10 @@ namespace Parsing_Plugin
             int magBaseAdj = (int)Math.Round(l.magBase * 10);
 
             // Basic attack, magnitude is actual damage dealt taking resists/buffs/debuffs/critical into account, magnitudeBase is damage without these 
-            if (l.evtInt == "Pn.Vklp251")
+            if (l.evtInt == "Pn.H8hm3x1")
             {
+                // 13:07:17:10:37:53.5::righteous,P[201081445@5908801 righteous@r1ghteousg],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Cleanse,Pn.H8hm3x1,AttribModExpire,ShowPowerDisplayName,0,0
+
                 if (ActGlobals.oFormActMain.InCombat)
                 {
                     //handle cleanse   "Reinigen/Cleanse"
