@@ -344,6 +344,27 @@ namespace Parsing_Plugin
             // Sacred Flame
             // 13:07:13:16:29:33.6::Kratos,P[200351767@6314814 Kratos@symon189],Infiltrator,C[111210 Mindflayer_Infiltrator],Kratos,P[200351767@6314814 Kratos@symon189],Sacred Flame,Pn.Ke4quc1,HitPoints,,-1390.32,0
             ownerIsTheRealSource.Add("Pn.Ke4quc1", true);
+
+            // Disintegrate Ray
+            // 13:07:18:10:37:22.7::Eye Tyrant,C[1420 Beholder_Eyetyrant],Disintegrate Ray,C[1842 Entity_Beholder_Disintegrateray],Lodur,P[201093074@7545190 Lodur@lodur42],Disintegrate Ray,Pn.G2i22u1,Psychic,Dodge,1328.41,10465
+            ownerIsTheRealSource.Add("Pn.G2i22u1", true);
+
+            // Entity_Beholder_Telekinesisray
+            // 13:07:18:10:37:40.1::Eye Tyrant,C[1420 Beholder_Eyetyrant],C[1858 Entity_Beholder_Telekinesisray],C[1858 Entity_Beholder_Telekinesisray],Akamaru,C[1680 Pet_Dog],,Pn.W557l21,Psychic,,1568.8,7923.25
+            ownerIsTheRealSource.Add("Pn.W557l21", true);
+
+            // Withering Ray
+            // 13:07:18:10:38:55.0::Eye Tyrant,C[1420 Beholder_Eyetyrant],Withering Ray,C[1939 Entity_Beholder_Witheringray],Tristan,C[1547 Pet_Dog],Withering Ray,Pn.U4tl6g1,Necrotic,,1515.7,7578.5
+            ownerIsTheRealSource.Add("Pn.U4tl6g1", true);
+
+            // Petrifying Ray
+            // 13:07:18:10:38:05.9::Eye Tyrant,C[1420 Beholder_Eyetyrant],Petrifying Ray,C[1880 Entity_Beholder_Petrifyingray],Largoevo,P[201228983@6531604 Largoevo@largoevo],Petrifying Ray,Pn.P66a8c,Psychic,,2002.91,10014.5
+            ownerIsTheRealSource.Add("Pn.P66a8c", true);
+
+            // Alacrity
+            // "13:07:19:09:39:39.2::Arejun,P[201154888@7400124 Arejun@aggsemd],Decrepit Skeleton,C[276 Skeleton_Basic_Summoned],Arejun,P[201154888@7400124 Arejun@aggsemd],Alacrity,Pn.Qhl41x,PowerRecharge,ShowPowerDisplayName,-0,0"
+            ownerIsTheRealSource.Add("Pn.Qhl41x", true);
+
         }
         
         private string GetIntCommas()
@@ -1043,6 +1064,14 @@ namespace Parsing_Plugin
                 // Not a pet.
                 exception = true;
             }
+            else if (line.evtInt == "Pn.Wypyjw1")
+            {
+                // Knight's Valor
+                // Look's like getting attack by your own pet...
+                // "13:07:18:10:48:34.2::Largoevo,P[201228983@6531604 Largoevo@largoevo],Illusion of Pain,C[2146 Entity_Illusionofpain],Largoevo,P[201228983@6531604 Largoevo@largoevo],Knight's Valor,Pn.Wypyjw1,Physical,Flank,21.7905,110.053"	string
+                if (line.srcEntityType == EntityType.Pet) line.srcEntityType = EntityType.Creature;
+                exception = true;
+            }
 
             // Record owner of all pets we see.
             if (line.srcEntityType == EntityType.Pet && (!exception))
@@ -1519,6 +1548,16 @@ namespace Parsing_Plugin
 
                         magicMissileLastHit.Add(l.unitTargetName, cgi);
                     }
+                }
+
+                // Knight's Valor,
+                if (l.evtInt == "Pn.Wypyjw1")
+                {
+                    // "13:07:18:10:30:48.3::Largoevo,P[201228983@6531604 Largoevo@largoevo],Ugan the Abominable,C[1469 Mindflayer_Miniboss_Ugan],Largoevo,P[201228983@6531604 Largoevo@largoevo],Knight's Valor,Pn.Wypyjw1,Physical,,449.42,1195.48
+                    // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
+
+                    l.encAttackerName = l.srcDsp;
+                    l.unitAttackerName = l.srcDsp;
                 }
 
                 if (magBaseAdj > 0)
