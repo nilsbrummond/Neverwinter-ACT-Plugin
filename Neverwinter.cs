@@ -365,6 +365,9 @@ namespace Parsing_Plugin
             // "13:07:19:09:39:39.2::Arejun,P[201154888@7400124 Arejun@aggsemd],Decrepit Skeleton,C[276 Skeleton_Basic_Summoned],Arejun,P[201154888@7400124 Arejun@aggsemd],Alacrity,Pn.Qhl41x,PowerRecharge,ShowPowerDisplayName,-0,0"
             ownerIsTheRealSource.Add("Pn.Qhl41x", true);
 
+            // Illusion of Pain
+            // 13:07:18:10:48:42.1::Oll'noth the Dominator,C[1997 Mindflayer_Eventboss],Illusion of Pain,C[2151 Entity_Illusionofpain],Largoevo,P[201228983@6531604 Largoevo@largoevo],Illusion of Pain,Pn.Pxfpy81,Psychic,,183.381,926.169
+            ownerIsTheRealSource.Add("Pn.Pxfpy81", true);
         }
         
         private string GetIntCommas()
@@ -946,10 +949,10 @@ namespace Parsing_Plugin
             processPetNames(pl);
             processNames(pl);
 
-            logInfo.detectedType = parseLineType(pl).ToArgb();
+            //logInfo.detectedType = parseLineType(pl).ToArgb();
 
             // Do the real stuff..
-            processAction(pl);
+            processAction2(pl);
         }
 
         private void processOwnerSourceTarget(ParsedLine line)
@@ -1255,6 +1258,7 @@ namespace Parsing_Plugin
             }
         }
 
+        /*
         private Color parseLineType(ParsedLine l)
         {
 
@@ -1318,7 +1322,9 @@ namespace Parsing_Plugin
 
             return Color.Gray;
         }
+        */
 
+        /*
         private void processAction(ParsedLine l)
         {
             int magAdj = (int)Math.Round(l.mag * 10);
@@ -1627,6 +1633,402 @@ namespace Parsing_Plugin
                 }
             }
         }
+        */
+
+        private void processActionHeals(ParsedLine l)
+        {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
+            l.logInfo.detectedType = l.critical ? Color.Green.ToArgb() : Color.DarkGreen.ToArgb();
+
+            // Heals can not start an encounter.
+            if (ActGlobals.oFormActMain.InCombat)
+            {
+                // PVP Rune Heal - Needs some cleanup.  Use the player as the source since they grabbed it.
+                // Does 'Pn.R0jdk' == PVP RUNE HEAL???
+                // 13:07:09:14:00:23.2::Rune,C[317 Pvp_Rune_Heal],,*,Mus'Mugen Uhlaalaa,P[201045055@5998737 Mus'Mugen Uhlaalaa@bupfen],Heal,Pn.R0jdk,HitPoints,,-1136.92,0
+
+                if (l.evtInt == "Pn.R0jdk") // Assume this is PVP Rune Heal for now...
+                {
+                    // Use encounter names attacker and target here.  This allows filtering
+                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
+                    {
+                        ActGlobals.oFormActMain.AddCombatAction(
+                            (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
+                            "PVP Heal Rune", new Dnum(-magAdj), l.logInfo.detectedTime,
+                            l.ts, l.unitTargetName, l.type);
+                    }
+                }
+                else if (l.evtInt == "Pn.Hemuxg") // PvP Kill downed player
+                {
+                    // PVP finish off
+                    // 13:07:10:09:13:09.2::CamierDerWeisse,P[200083978@5783571 CamierDerWeisse@faru2],,*,FIVEFINGERZ,P[200862049@7260841 FIVEFINGERZ@fivefingerz],Kill,Pn.Hemuxg,HitPoints,,0,0
+
+                    // TODO:  Should this be recorded or ignored...
+                }
+                else if (l.evtInt == "Pn.Qiwkdx1") // Pretty sure this is end of pvp auto heal.
+                {
+                    // TODO: Make sure this is really only an end of pvp match auto heal.
+                    // 13:07:10:11:03:42.1::Nephylia Necromon,P[201238857@7793332 Nephylia Necromon@nephodin],,*,,*,,Pn.Qiwkdx1,HitPoints,,-7240.66,0
+                    // Ignore it.
+                }
+                else if (l.evtInt == "Pn.Dbm4um1") // Campfire
+                {
+                    // Camp fire.
+                    // Give credit to the player for standing in it.
+                    // Note: Trying to eliminate the [unknown] source.
+                    // 13:07:10:11:02:20.6::,,,,Brandeor,P[201267923@5148411 Brandeor@brandeor],Campfire,Pn.Dbm4um1,HitPoints,,-525.321,0
+
+                    // Use encounter names attacker and target here.  This allows filtering
+                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
+                    {
+                        ActGlobals.oFormActMain.AddCombatAction(
+                            (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
+                            l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+                            l.ts, l.unitTargetName, l.type);
+                    }
+                }
+                else if (l.evtInt == "Pn.Zrqjy1") // Chaotic Growth
+                {
+                    // Chaotic Growth - Proc debuff from CW Magic Missile.  Debuffed target AOE heals casters allies.
+                    // But the log shows the debuffed target as the healer...
+                    // Credit should go to the CW that casted the MM, but that is not clear in the logs.
+
+                    // 13:07:09:20:52:51.5::Rassler,P[200973822@6215544 Rassler@lendal4],,*,Rhiyan Torr,P[200010914@5686857 Rhiyan Torr@wyvernonenine],Chaotic Growth,Pn.Zrqjy1,HitPoints,,-215,0
+
+                    // NOTE:  Track the last person to hit each target with magic missile.  Give healing credit to that person.
+                    //        IF that fails then it is a self heal...  Keeps it on the same team in pvp at least.
+
+                    bool handled = false;
+                    ChaoticGrowthInfo cgi = null;
+                    if (magicMissileLastHit.TryGetValue(l.unitAttackerName, out cgi))
+                    {
+                        if (!cgi.triggered)
+                        {
+                            cgi.triggered = true;
+                            cgi.ts = l.logInfo.detectedTime;
+                        }
+
+                        // Use encounter names attacker and target here.  This allows filtering
+                        if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, cgi.encName, l.encTargetName))
+                        {
+                            ActGlobals.oFormActMain.AddCombatAction(
+                                (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, cgi.unitName,
+                                l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+                                l.ts, l.unitTargetName, l.type);
+                        }
+
+                        handled = true;
+                    }
+
+                    if (!handled)
+                    {
+                        // Use encounter names attacker and target here.  This allows filtering
+                        if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
+                        {
+                            ActGlobals.oFormActMain.AddCombatAction(
+                                (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, l.unitTargetName,
+                                l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+                                l.ts, l.unitTargetName, l.type);
+                        }
+                    }
+                }
+                else if (l.evtInt == "Pn.R1tsg4")
+                {
+                    // Shocking execution
+                    // There is a HitPoints of value zero that is assioatied with shocking execution.
+                    // Note that the <EvtInt> is different from the actual damaging log entry.
+                    // Just ignore it...
+                    // 13:07:17:10:33:02.1::Lodur,P[201093074@7545190 Lodur@lodur42],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Shocking Execution,Pn.R1tsg4,HitPoints,,0,0
+
+                }
+                else
+                {
+                    // Default heal.
+                    addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
+                }
+            }
+        }
+
+        private void processActionShields(ParsedLine l)
+        {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
+            // Shielding goes first and acts like a heal to cancel coming damage.  Attacker has his own damage line.  example:
+
+            // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Shield,,-349.348,-154.608
+            // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Shield,,-559.613,-247.663
+            // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Radiant,,154.608,349.348
+            // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Arcane,,247.663,559.613
+
+            // NOTE:
+            // Notice that the mag and magBase numbers are swap in the shield line verse the damage line.
+            // Therefore the amount shield == magBase ???
+            // The mag is meaningless ???
+            // If mag > magBase on the attack is all damage not shielded ???  (ie high armor pen)
+
+            // NOTE:
+            // NW Patch on 7/17/2013 changed shield to report blocked damage in the mag field.
+            // 13:07:18:10:25:54.2::Miner,C[1445 Mindflayer_Duergarminerthrall],,*,Largoevo,P[201228983@6531604 Largoevo@largoevo],Melee Attack,Pn.M7kie6,Shield,,-242.837,0
+            
+            //
+            // Target prevented damage.
+            //
+
+            l.logInfo.detectedType = l.critical ? Color.Green.ToArgb() : Color.DarkGreen.ToArgb();
+
+            // Use encounter names attacker and target here.  This allows filtering
+            if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
+            {
+                // Put the attacker and the attack type in the special field.
+                string special = l.unitAttackerName + " : " + l.attackType;
+
+                ActGlobals.oFormActMain.AddCombatAction(
+                    (int)SwingTypeEnum.Healing, false, special, l.unitTargetName,
+                    l.type, new Dnum(-magAdj), l.logInfo.detectedTime,
+                    l.ts, l.unitTargetName, "HitPoints");
+            }
+        }
+
+        private void processActionCleanse(ParsedLine l)
+        {
+            l.logInfo.detectedType = Color.Orange.ToArgb();
+
+            // Cleanse
+            // 13:07:17:10:37:53.5::righteous,P[201081445@5908801 righteous@r1ghteousg],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Cleanse,Pn.H8hm3x1,AttribModExpire,ShowPowerDisplayName,0,0
+
+            if (ActGlobals.oFormActMain.InCombat)
+            {
+                addCombatAction(l, (int)SwingTypeEnum.CureDispel, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
+            }
+        }
+
+        private void processActionPower(ParsedLine l)
+        {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            //int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
+            l.logInfo.detectedType = Color.Black.ToArgb();
+
+            if (ActGlobals.oFormActMain.InCombat)
+            {
+                if (l.evtInt == "Pn.He9xu") // Bait and Switch
+                {
+                    // TR - Bait and Switch Trigger
+                    // special case: Bait and Switch
+                    // 13:07:09:20:53:00.9::Lodur,C[835 Trickster_Baitandswitch],,*,Lodur,P[201093074@7545190 Lodur@lodur42],Trigger,Pn.He9xu,Power,,-0.521139,0
+                    // 13:07:09:21:43:30.3::Lodur,C[152 Trickster_Baitandswitch],,*,Lodur,P[201093074@7545190 Lodur@lodur42],Trigger,Pn.He9xu,Power,Immune,0,0
+                    // 13:07:10:09:11:08.8::Lodur,C[178 Trickster_Baitandswitch],,*,Lodur,P[201093074@7545190 Lodur@lodur42],Trigger,Pn.He9xu,Power,Immune,0,0
+
+                    // Target is the source as well.
+                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.tgtDsp, l.tgtDsp))
+                    {
+                        ActGlobals.oFormActMain.AddCombatAction(
+                            (int)SwingTypeEnum.PowerHealing, l.critical, "", "Trickster [" + l.tgtDsp + "]",
+                            "Bait and Switch", new Dnum(-magAdj), l.logInfo.detectedTime,
+                            l.ts, l.tgtDsp, l.type);
+                    }
+                }
+                else
+                {
+                    // Normal Power case...
+                    addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
+                }
+            }
+        }
+
+        private void processActionSPDN(ParsedLine l)
+        {
+            // Handle all the buff and proc buffs/debuffs
+            // type: PowerRecharge, Null, Alacrity, CombatAdvantage, Lightning(Storm Spell), CritSeverity, ...
+
+            l.logInfo.detectedType = Color.DarkTurquoise.ToArgb();
+
+            if (l.evtInt == "Pn.Fwolu") // Chaotic Growth
+            {
+                // Chaotic Growth (Fixed in latest NW patch)
+                // 13:07:18:10:51:58.2::Tifa,P[200500793@6707245 Tifa@liliiith],,*,Guard,C[2205 Mindflayer_Duergarguardthrall],Chaotic Growth,Pn.Fwolu,Null,ShowPowerDisplayName,0,0
+
+                l.logInfo.detectedType = Color.DarkOliveGreen.ToArgb();
+
+                ChaoticGrowthInfo cgi = null;
+                if (magicMissileLastHit.TryGetValue(l.unitAttackerName, out cgi))
+                {
+                    cgi.triggered = true;
+                    cgi.ts = l.logInfo.detectedTime;
+                    cgi.encName = l.encAttackerName;
+                    cgi.unitName = l.unitAttackerName;
+                }
+
+                if (ActGlobals.oFormActMain.InCombat)
+                {
+                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
+                }
+            }
+            else if (l.evtInt == "Pn.Zh5vu")
+            {
+                // Storm Spell
+                // 13:07:18:10:49:10.1::Tifa,P[200500793@6707245 Tifa@liliiith],,*,Scourge,C[2143 Mindflayer_Scourge],Storm Spell,Pn.Zh5vu,Lightning,ShowPowerDisplayName,583.917,0
+
+                // Ignore this as there is a damage log line to go with it.
+            }
+            else
+            {
+                // Default
+
+                if (ActGlobals.oFormActMain.InCombat)
+                {
+                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
+                }
+            }
+        }
+
+        private void processActionDamage(ParsedLine l)
+        {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
+            l.logInfo.detectedType = l.critical ? Color.Red.ToArgb() : Color.DarkRed.ToArgb();
+
+            if ((l.evtInt == "Pn.3t6cw8") && (magAdj > 0)) // Magic Missile
+            {
+                ChaoticGrowthInfo cgi = null;
+                if (magicMissileLastHit.TryGetValue(l.unitTargetName, out cgi))
+                {
+                    if (cgi.triggered)
+                    {
+                        TimeSpan t = l.logInfo.detectedTime - cgi.ts;
+                        if (t.TotalSeconds > 10.0)
+                        {
+                            cgi.triggered = false;
+                        }
+                    }
+
+                    if (!cgi.triggered)
+                    {
+                        cgi.encName = l.encAttackerName;
+                        cgi.unitName = l.unitAttackerName;
+                        cgi.ts = l.logInfo.detectedTime;
+                    }
+                }
+                else
+                {
+                    cgi = new ChaoticGrowthInfo();
+                    cgi.encName = l.encAttackerName;
+                    cgi.unitName = l.unitAttackerName;
+                    cgi.triggered = false;
+                    cgi.ts = l.logInfo.detectedTime;
+
+                    magicMissileLastHit.Add(l.unitTargetName, cgi);
+                }
+            }
+            else if (l.evtInt == "Autodesc.Combatevent.Falling")
+            {
+                // Falling damage does not start combat...
+                if (ActGlobals.oFormActMain.InCombat)
+                {
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                }
+            }
+            else if (l.evtInt == "Pn.Wypyjw1") // Knight's Valor,
+            {
+                // "13:07:18:10:30:48.3::Largoevo,P[201228983@6531604 Largoevo@largoevo],Ugan the Abominable,C[1469 Mindflayer_Miniboss_Ugan],Largoevo,P[201228983@6531604 Largoevo@largoevo],Knight's Valor,Pn.Wypyjw1,Physical,,449.42,1195.48
+                // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
+
+                // TODO: resolve src to src owner...
+
+                l.encAttackerName = l.srcDsp;
+                l.unitAttackerName = l.srcDsp;
+            }
+            else
+            {
+                if (l.flags.Contains("Miss"))
+                {
+                    // TODO:  Not sure I have ever seen a "miss" in a log.  This actually valid?
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type, magBaseAdj);
+                }
+                else if (l.immune)
+                {
+                    // Generally damaging attacks have mag=0 and magBase > 0 when Immune.
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type, magBaseAdj);
+                }
+                else if (l.dodge)
+                {
+                    // It really looks like Dodge does not stop all damage - just reduces it by about 80%...
+                    // I have seen damaging attacks that are both Dodge and Kill in the flags.  
+                    // So the target dodged but still died.
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                }
+                else
+                {
+                    // All attacks have a magBase.
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                }
+            }
+        }
+
+        private void processAction2(ParsedLine l)
+        {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
+            l.logInfo.detectedType = Color.Gray.ToArgb();
+
+            if (l.type == "HitPoints")
+            {
+                processActionHeals(l);
+            }
+            else if (l.type == "Shield")
+            {
+                processActionShields(l);
+            }
+            else if (l.type == "AttribModExpire") // Cleanse
+            {
+                processActionCleanse(l);
+            }
+            else if (l.type == "Power")
+            {
+                processActionPower(l);
+            }
+            else if (l.showPowerDisplayName)
+            {
+                // Non-damaging effects.
+                processActionSPDN(l);
+            }
+            else
+            {
+                // What is left should all be damage.
+                processActionDamage(l);
+            }
+
+            // add action Killing
+            if (l.kill)
+            {
+                l.logInfo.detectedType = Color.Fuchsia.ToArgb();
+
+                // Clean from last MM hit.
+                magicMissileLastHit.Remove(l.unitTargetName);
+
+                // TODO: use tgtDsp or unitTargetName?
+                ActGlobals.oFormSpellTimers.RemoveTimerMods(l.tgtDsp);
+                ActGlobals.oFormSpellTimers.DispellTimerMods(l.tgtDsp);
+
+                // No "Killing : Flank" ever.  Doesn't make sense since there is no damage in the kill tracking.
+                // And it messes up the kill counts.
+                // addCombatAction(l, l.swingType, l.critical, l.special, "Killing", Dnum.Death, l.type);
+
+                // Use encounter names attacker and target here.  This allows filtering
+                if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
+                {
+                    ActGlobals.oFormActMain.AddCombatAction(
+                        l.swingType, l.critical, l.special, l.unitAttackerName,
+                        "Killing", Dnum.Death, l.logInfo.detectedTime,
+                        l.ts, l.unitTargetName, "Death");
+                }
+            }
+        }
 
         private void addCombatAction(
             ParsedLine line, int swingType, bool critical, string special, string theAttackType, Dnum Damage, string theDamageType, int baseDamage=0)
@@ -1788,7 +2190,7 @@ namespace Parsing_Plugin
         public String ownDsp, ownInt, srcDsp, srcInt, tgtDsp, tgtInt, evtDsp, evtInt;
         public String type, attackType, special, flags;
         public int swingType, ts;
-        public bool critical, flank, dodge, immune, kill;
+        public bool critical, flank, dodge, immune, kill, showPowerDisplayName;
         public float mag, magBase;
         public bool error;
 
@@ -1877,6 +2279,9 @@ namespace Parsing_Plugin
                             break;
                         case "Kill":
                             kill = true;
+                            break;
+                        case "ShowPowerDisplayName":
+                            showPowerDisplayName = true;
                             break;
 
                         default:
