@@ -175,15 +175,8 @@ namespace Parsing_Plugin
         // This is for SQL syntax; do not change
         internal static CultureInfo usCulture = new CultureInfo("en-US");
 
-        // Pet internal id to owner display name
-
-        //internal static Dictionary<string, OwnerInfo> petPlayerCache = new Dictionary<string, OwnerInfo>();
-        //internal Dictionary<string, OwnerInfo> playerPetCache = new Dictionary<string, OwnerInfo>();
-
         private PetOwnerRegistery petOwnerRegistery = new PetOwnerRegistery();
         private EntityOwnerRegistery entityOwnerRegistery = new EntityOwnerRegistery();
-
-        // internal Dictionary<string, bool> ownerIsTheRealSource = null;
 
         // For tracking source of Chaotic Growth heals.
         internal Dictionary<string, ChaoticGrowthInfo> magicMissileLastHit = new Dictionary<string, ChaoticGrowthInfo>();
@@ -291,88 +284,6 @@ namespace Parsing_Plugin
             lblStatus = pluginStatusText;
             lblStatus.Text = "Neverwinter ACT plugin loaded";
         }
-
-        /*
-        private void InitializeOwnerIsTheRealSource()
-        {
-            // TODO:  Should this be the default (owner gets credit) the exception be the src gets credit?
-            //        Need to look at that appoach.  Would a Pet be the only exception to that rule?
-
-            ownerIsTheRealSource = new Dictionary<string, bool>();
-
-            // Doom!
-            // "13:07:09:11:01:08.4::Correk,P[201028460@1546238 Correk@Gleyvien],Target Dummy,C[265291 Entity_Targetdummy],,*,Doom!,Pn.F1j0yx1,Radiant,Critical,10557.2,8445.78"
-            ownerIsTheRealSource.Add("Pn.F1j0yx1", true);
-
-            // Astral Shield
-            // 13:07:08:10:04:36.5::Fangogermany,P[200678852@4820887 Fangogermany@fangogermany],Divine Astral Shield,C[635 Entity_Cleric_Astralshield_Divine],Thorin Demoneye,P[201207170@6240948 Thorin Demoneye@mugen714],Astral Shield,Pn.Do58x01,HitPoints,,-442.911,0
-            ownerIsTheRealSource.Add("Pn.Do58x01", true);
-
-            // Guard Break..??
-            // "13:07:03:11:47:12.6::Grizzard,P[200743305@6022049 Grizzard@shamedy],Cutter,C[9395 Winterforge_Frost_Goblin_Cutter],Grizzard,P[200743305@6022049 Grizzard@shamedy],Guard Break,Pn.Jy04um1,Power,,-23.1135,0
-            ownerIsTheRealSource.Add("Pn.Jy04um1", true);
-
-            // Flame Strike
-            // 13:07:09:12:30:28.4::Rolen Taletreader,P[201260846@7855942 Rolen Taletreader@hehe13],Flame Strike,C[268743 Entity_Flamestrike],Target Dummy,C[268573 Entity_Targetdummy],Flame Strike,Pn.1pwldl,Fire,,424.395,0
-            ownerIsTheRealSource.Add("Pn.1pwldl", true);
-
-            // Arcane Singularity
-            // 13:07:09:14:00:37.8::Natalia Ratova,P[200724456@4597813 Natalia Ratova@candlewolf],Phantasm,C[324 Entity_Arcanesingularity],Chicho,P[201128876@7369799 Chicho@hutch90],Arcane Singularity,Pn.Zlm7uf,ConstantForce,Immune,0,0
-            ownerIsTheRealSource.Add("Pn.Zlm7uf", true);
-
-            // Daunting Light
-            // 13:07:09:14:06:14.6::Deepshanx,P[200977150@5512302 Deepshanx@deepshanx],Daunting Light,C[354 Entity_Dauntinglight_Zone],Rampage,P[200247698@5976052 Rampage@Aggovain],Daunting Light,Pn.7qb24b,Radiant,,2100.64,3546.14
-            ownerIsTheRealSource.Add("Pn.7qb24b", true);
-
-            // Storm Pillar
-            // 13:07:09:19:11:06.4::Devwin,P[200237307@5570467 Devwin@chronalsurge],Storm Pillar,C[245 Entity_Stormpillar_Weak],Orexion,P[200057573@5810203 Orexion@theace02],Storm Pillar,Pn.Vexgm3,Lightning,,175.989,393.029
-            ownerIsTheRealSource.Add("Pn.Vexgm3", true);
-
-            // Bilethorn Weapon
-            // 13:07:10:00:22:49.4::Pristina,P[200701659@6066607 Pristina@alnana],Lodur,C[42 Trickster_Baitandswitch],,*,Bilethorn Weapon,Pn.Nhw1351,Poison,,5.447,6.5
-            ownerIsTheRealSource.Add("Pn.Nhw1351", true);
-
-            // Hallowed Ground
-            // 13:07:08:09:37:04.7::Kaps,P[200709935@7009499 Kaps@kaps181],Hallowed Ground,C[386 Entity_Hallowedground_Zone],Dirty Horror,P[201149078@6317095 Dirty Horror@scooby1361],Moon Touched,Pn.Fb9e3q,HitPoints,,-1429.35,0
-            ownerIsTheRealSource.Add("Pn.Fb9e3q", true);
-
-            // Shard of the Endless Avalanche
-            // 13:07:17:10:24:30.2::zoorhie,P[200847904@7204132 zoorhie@zeldanora13],Shard,C[620 Entity_Shardoftheendlessavalanche],Chloe Oralia,P[200802208@6132862 Chloe Oralia@alluriya],Shardplosion,Pn.7d13go,Arcane,,2283.86,3696.82
-            ownerIsTheRealSource.Add("Pn.7d13go", true);
-
-            // Sudden Storm
-            // 13:07:17:15:28:58.7::Sharee,P[201240783@6333626 Sharee@baelzeden],Domination Point,C[131 Pvp_Capturepoint],Bishop,P[200705682@6899836 Bishop@daytak],Sudden Storm Arc,Pn.6c0tls,Lightning,,94.6794,202.771
-            ownerIsTheRealSource.Add("Pn.6c0tls", true);
-
-            // Sacred Flame
-            // 13:07:13:16:29:33.6::Kratos,P[200351767@6314814 Kratos@symon189],Infiltrator,C[111210 Mindflayer_Infiltrator],Kratos,P[200351767@6314814 Kratos@symon189],Sacred Flame,Pn.Ke4quc1,HitPoints,,-1390.32,0
-            ownerIsTheRealSource.Add("Pn.Ke4quc1", true);
-
-            // Disintegrate Ray
-            // 13:07:18:10:37:22.7::Eye Tyrant,C[1420 Beholder_Eyetyrant],Disintegrate Ray,C[1842 Entity_Beholder_Disintegrateray],Lodur,P[201093074@7545190 Lodur@lodur42],Disintegrate Ray,Pn.G2i22u1,Psychic,Dodge,1328.41,10465
-            ownerIsTheRealSource.Add("Pn.G2i22u1", true);
-
-            // Entity_Beholder_Telekinesisray
-            // 13:07:18:10:37:40.1::Eye Tyrant,C[1420 Beholder_Eyetyrant],C[1858 Entity_Beholder_Telekinesisray],C[1858 Entity_Beholder_Telekinesisray],Akamaru,C[1680 Pet_Dog],,Pn.W557l21,Psychic,,1568.8,7923.25
-            ownerIsTheRealSource.Add("Pn.W557l21", true);
-
-            // Withering Ray
-            // 13:07:18:10:38:55.0::Eye Tyrant,C[1420 Beholder_Eyetyrant],Withering Ray,C[1939 Entity_Beholder_Witheringray],Tristan,C[1547 Pet_Dog],Withering Ray,Pn.U4tl6g1,Necrotic,,1515.7,7578.5
-            ownerIsTheRealSource.Add("Pn.U4tl6g1", true);
-
-            // Petrifying Ray
-            // 13:07:18:10:38:05.9::Eye Tyrant,C[1420 Beholder_Eyetyrant],Petrifying Ray,C[1880 Entity_Beholder_Petrifyingray],Largoevo,P[201228983@6531604 Largoevo@largoevo],Petrifying Ray,Pn.P66a8c,Psychic,,2002.91,10014.5
-            ownerIsTheRealSource.Add("Pn.P66a8c", true);
-
-            // Alacrity
-            // "13:07:19:09:39:39.2::Arejun,P[201154888@7400124 Arejun@aggsemd],Decrepit Skeleton,C[276 Skeleton_Basic_Summoned],Arejun,P[201154888@7400124 Arejun@aggsemd],Alacrity,Pn.Qhl41x,PowerRecharge,ShowPowerDisplayName,-0,0"
-            ownerIsTheRealSource.Add("Pn.Qhl41x", true);
-
-            // Illusion of Pain
-            // 13:07:18:10:48:42.1::Oll'noth the Dominator,C[1997 Mindflayer_Eventboss],Illusion of Pain,C[2151 Entity_Illusionofpain],Largoevo,P[201228983@6531604 Largoevo@largoevo],Illusion of Pain,Pn.Pxfpy81,Psychic,,183.381,926.169
-            ownerIsTheRealSource.Add("Pn.Pxfpy81", true);
-        }
-        */
 
         private string GetIntCommas()
         {
@@ -615,16 +526,6 @@ namespace Parsing_Plugin
                     return flankCount;
                 }
             }
-            /*  BUG
-             *  	
-                [External Code]	
-	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetAAFlankValue(Advanced_Combat_Tracker.AttackType Data) Line 587 + 0xd8 bytes	C#
- 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetDTFlankValue(Advanced_Combat_Tracker.DamageTypeData Data) Line 519 + 0xb bytes	C#
- 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetDTFlankPrecValue(Advanced_Combat_Tracker.DamageTypeData Data) Line 536 + 0xb bytes	C#
- 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.CDCompareFlankDamPrec(Advanced_Combat_Tracker.CombatantData Left, Advanced_Combat_Tracker.CombatantData Right) Line 717 + 0x32 bytes	C#
- 	            [External Code]	
-             *
-             */
 
             int count = Data.Items.Count;
 
@@ -1279,120 +1180,6 @@ namespace Parsing_Plugin
                 case EntityType.Creature:
                     {
                         if (line.tgtInt.Contains(" Trickster_Baitandswitch"))
-                        {
-                            // Bait and Switch
-                            // 13:07:09:21:57:26.9::Dracnia,P[200787912@7184553 Dracnia@tminhtran],,*,Lodur,C[215 Trickster_Baitandswitch],Lashing Blade,Pn.Gji3ar1,Physical,Critical|Flank|Kill,14778.6,15481.4
-                            // Not a pet...
-
-                            line.encTargetName = line.tgtDsp;
-                            line.unitTargetName = "Trickster [" + line.tgtDsp + "]";
-                        }
-                        else
-                        {
-                            line.encTargetName = line.tgtDsp;
-                            String creatureId = line.tgtInt.Split()[0].Substring(2);
-
-                            if (checkBox_mergeNPC.Checked)
-                            {
-                                // Merge all NPCs to a single name.
-                                line.unitTargetName = line.tgtDsp;
-                            }
-                            else
-                            {
-                                // Separate each NPC with its unique creature ID added.
-                                line.unitTargetName = line.tgtDsp + " [" + creatureId + "]";
-                            }
-                        }
-                        break;
-                    }
-
-                // case ParsedLine.EntityType.Unknown:
-                default:
-                    {
-                        // Use the defaults.
-                        break;
-                    }
-            }
-        }
-
-        private void processNames(ParsedLine line)
-        {
-            switch (line.srcEntityType)
-            {
-                case EntityType.Player:
-                    {
-                        line.encAttackerName = line.srcDsp;
-                        line.unitAttackerName = line.srcDsp;
-                        break;
-                    }
-
-                case EntityType.Pet:
-                    {
-                        // Use the pet owner name for encounter name and filtering.
-                        line.encAttackerName = line.ownDsp;
-
-                        // Pet name:
-                        line.unitAttackerName = line.srcDsp + " [" + line.ownDsp + "'s Pet]";
-                        if (this.checkBox_mergePets.Checked)
-                        {
-                            line.unitAttackerName = line.ownDsp;
-                        }
-                        break;
-                    }
-
-                case EntityType.Creature:
-                    {
-                        line.encAttackerName = line.srcDsp;
-                        String creatureId = line.srcInt.Split()[0].Substring(2);
-
-                        if (checkBox_mergeNPC.Checked)
-                        {
-                            // Merge all NPCs to a single name.
-                            line.unitAttackerName = line.srcDsp;
-                        }
-                        else
-                        {
-                            // Separate each NPC with its unique creature ID added.
-                            line.unitAttackerName = line.srcDsp + " [" + creatureId + "]";
-                        }
-                        break;
-                    }
-
-                // case ParsedLine.EntityType.Unknown:
-                default:
-                    {
-                        // Use the defaults.
-                        break;
-                    }
-            }
-
-            switch (line.tgtEntityType)
-            {
-                case EntityType.Player:
-                    {
-                        line.encTargetName = line.tgtDsp;
-                        line.unitTargetName = line.tgtDsp;
-                        break;
-                    }
-
-                case EntityType.Pet:
-                    {
-                        // Use the pet owner name for encounter name and filtering.
-                        line.encTargetName = line.tgtOwnerInfo.ownerDsp;
-
-                        // Pet name:
-                        line.unitTargetName = line.tgtDsp + " [" + line.tgtOwnerInfo.ownerDsp + "'s Pet]";
-                        if (this.checkBox_mergePets.Checked)
-                        {
-                            line.unitTargetName = line.tgtOwnerInfo.ownerDsp;
-                        }
-                        break;
-                    }
-
-                case EntityType.Creature:
-                    {
-
-                        if (line.tgtInt.Contains("Trickster_Baitandswitch"))
                         {
                             // Bait and Switch
                             // 13:07:09:21:57:26.9::Dracnia,P[200787912@7184553 Dracnia@tminhtran],,*,Lodur,C[215 Trickster_Baitandswitch],Lashing Blade,Pn.Gji3ar1,Physical,Critical|Flank|Kill,14778.6,15481.4
