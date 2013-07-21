@@ -17,20 +17,18 @@ TODO:
 - set encounter name
 - set character name
 - power replenish shall not be inc damage
-- overheal ?? prolly the diff of l.mag to l.magBase ??
-- filter all non-player-chars check, how to handle ??
 - activate help text in options window
-- handle unknown activities, transfer into known activities
-- remove threat as it is not in the logs.
 
 */
 
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.7.3")]
+[assembly: AssemblyVersion("0.0.8.0")]
 
 /* Version History - npb
+ * 0.0.8.0 - 2013/7/20
+ *  - Reworked the processing model.  Less special cases.  Better support.
  * 0.0.7.0 - 2013/7/16
  *  - Added Flank as a column type
  *  - Added Effectiveness column ( actual damage / base damage )
@@ -804,6 +802,7 @@ namespace Parsing_Plugin
             curActionTime = DateTime.MinValue;
             //purgePetCache();
             petOwnerRegistery.Clear();
+            entityOwnerRegistery.Clear();
             magicMissileLastHit.Clear();
         }
 
@@ -1285,7 +1284,7 @@ namespace Parsing_Plugin
 
                     bool handled = false;
                     ChaoticGrowthInfo cgi = null;
-                    if (magicMissileLastHit.TryGetValue(l.unitAttackerName, out cgi))
+                    if (magicMissileLastHit.TryGetValue(l.srcInt, out cgi))
                     {
                         if (!cgi.triggered)
                         {
@@ -1311,7 +1310,7 @@ namespace Parsing_Plugin
                         if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
                         {
                             ActGlobals.oFormActMain.AddCombatAction(
-                                (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, l.unitTargetName,
+                                (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, unk,
                                 l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
@@ -1490,7 +1489,7 @@ namespace Parsing_Plugin
                 processNamesOST(l);
 
                 ChaoticGrowthInfo cgi = null;
-                if (magicMissileLastHit.TryGetValue(l.unitAttackerName, out cgi))
+                if (magicMissileLastHit.TryGetValue(l.tgtInt, out cgi))
                 {
                     cgi.triggered = true;
                     cgi.ts = l.logInfo.detectedTime;
@@ -1554,7 +1553,7 @@ namespace Parsing_Plugin
                 if ((l.evtInt == "Pn.3t6cw8") && (magAdj > 0)) // Magic Missile
                 {
                     ChaoticGrowthInfo cgi = null;
-                    if (magicMissileLastHit.TryGetValue(l.unitTargetName, out cgi))
+                    if (magicMissileLastHit.TryGetValue(l.tgtInt, out cgi))
                     {
                         if (cgi.triggered)
                         {
@@ -1580,7 +1579,7 @@ namespace Parsing_Plugin
                         cgi.triggered = false;
                         cgi.ts = l.logInfo.detectedTime;
 
-                        magicMissileLastHit.Add(l.unitTargetName, cgi);
+                        magicMissileLastHit.Add(l.tgtInt, cgi);
                     }
                 }
 
@@ -1674,7 +1673,8 @@ namespace Parsing_Plugin
                 l.logInfo.detectedType = Color.Fuchsia.ToArgb();
 
                 // Clean from last MM hit.
-                magicMissileLastHit.Remove(l.unitTargetName);
+                // The Kill can come right before a proc.  Ordering isssue.
+                // magicMissileLastHit.Remove(l.tgtInt);
 
                 // TODO: use tgtDsp or unitTargetName?
                 ActGlobals.oFormSpellTimers.RemoveTimerMods(l.tgtDsp);
