@@ -14,13 +14,10 @@ State
 =====
 - Needs testing and verification.
 - Tracking of CW Chaotic Growth gives the healing credit to the last CW to MM the target.
-- Companion pet's may not be handled the best way
-- Really wish we could detect zone changes.
 - I'm sure there are losts of different special cases left to handle.
 - Combat log colored.
 - Companion Pet's owners tracked.
-- Added damage base recording and effectiveness (dmg / dmgBase)
-- Removed default ACT features and columns that are not used be the NW plugin
+- Damage base recording and effectiveness (dmg / dmgBase)
 - Added 'Flank' (Combat Advantage?) as it's own column they way Critical Hits are.
 - Removed Column types and features of ACT that are not used by the NW plugin.
 
@@ -28,6 +25,7 @@ State
 Known Issues
 ============
 - Devoted Cleric power "Flame Strike" causes falling damage that can not be tracked.  Falling damage does not specify who/what caused the fall.
+- There is currently no way to detect zone changes from the Combatlog.Log file.
 
 
 Install
