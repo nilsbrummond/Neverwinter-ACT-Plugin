@@ -26,6 +26,7 @@ Known Issues
 ============
 - Devoted Cleric power "Flame Strike" causes falling damage that can not be tracked.  Falling damage does not specify who/what caused the fall.
 - There is currently no way to detect zone changes from the Combatlog.Log file.
+- All graphs show 10x the actual value.
 
 
 Install
