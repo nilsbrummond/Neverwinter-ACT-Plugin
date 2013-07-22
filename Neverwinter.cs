@@ -17,20 +17,18 @@ TODO:
 - set encounter name
 - set character name
 - power replenish shall not be inc damage
-- overheal ?? prolly the diff of l.mag to l.magBase ??
-- filter all non-player-chars check, how to handle ??
 - activate help text in options window
-- handle unknown activities, transfer into known activities
-- remove threat as it is not in the logs.
 
 */
 
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.7.3")]
+[assembly: AssemblyVersion("0.0.8.0")]
 
 /* Version History - npb
+ * 0.0.8.0 - 2013/7/20
+ *  - Reworked the processing model.  Less special cases.  Better support.
  * 0.0.7.0 - 2013/7/16
  *  - Added Flank as a column type
  *  - Added Effectiveness column ( actual damage / base damage )
@@ -175,12 +173,8 @@ namespace Parsing_Plugin
         // This is for SQL syntax; do not change
         internal static CultureInfo usCulture = new CultureInfo("en-US");
 
-        // Pet internal id to owner display name
-
-        internal static Dictionary<string, PetInfo> petPlayerCache = new Dictionary<string, PetInfo>();
-        internal Dictionary<string, PetInfo> playerPetCache = new Dictionary<string, PetInfo>();
-
-        internal Dictionary<string, bool> ownerIsTheRealSource = null;
+        private PetOwnerRegistery petOwnerRegistery = new PetOwnerRegistery();
+        private EntityOwnerRegistery entityOwnerRegistery = new EntityOwnerRegistery();
 
         // For tracking source of Chaotic Growth heals.
         internal Dictionary<string, ChaoticGrowthInfo> magicMissileLastHit = new Dictionary<string, ChaoticGrowthInfo>();
@@ -197,7 +191,6 @@ namespace Parsing_Plugin
 
         private int parsedLineCount = 0;
         private int errorLineCount = 0;
-        private int unknownLineCount = 0;
 
         public void InitPlugin(TabPage pluginScreenSpace, Label pluginStatusText)
         {
@@ -281,7 +274,7 @@ namespace Parsing_Plugin
             ActGlobals.oFormActMain.OnCombatEnd += new CombatToggleEventDelegate(oFormActMain_OnCombatEnd);
             ActGlobals.oFormActMain.LogFileChanged += new LogFileChangedDelegate(oFormActMain_LogFileChanged);
 
-            InitializeOwnerIsTheRealSource();
+            // InitializeOwnerIsTheRealSource();
 
             FixupCombatDataStructures();
 
@@ -290,83 +283,6 @@ namespace Parsing_Plugin
             lblStatus.Text = "Neverwinter ACT plugin loaded";
         }
 
-        private void InitializeOwnerIsTheRealSource()
-        {
-            // TODO:  Should this be the default (owner gets credit) the exception be the src gets credit?
-            //        Need to look at that appoach.  Would a Pet be the only exception to that rule?
-
-            ownerIsTheRealSource = new Dictionary<string, bool>();
-
-            // Doom!
-            // "13:07:09:11:01:08.4::Correk,P[201028460@1546238 Correk@Gleyvien],Target Dummy,C[265291 Entity_Targetdummy],,*,Doom!,Pn.F1j0yx1,Radiant,Critical,10557.2,8445.78"
-            ownerIsTheRealSource.Add("Pn.F1j0yx1", true);
-
-            // Astral Shield
-            // 13:07:08:10:04:36.5::Fangogermany,P[200678852@4820887 Fangogermany@fangogermany],Divine Astral Shield,C[635 Entity_Cleric_Astralshield_Divine],Thorin Demoneye,P[201207170@6240948 Thorin Demoneye@mugen714],Astral Shield,Pn.Do58x01,HitPoints,,-442.911,0
-            ownerIsTheRealSource.Add("Pn.Do58x01", true);
-
-            // Guard Break..??
-            // "13:07:03:11:47:12.6::Grizzard,P[200743305@6022049 Grizzard@shamedy],Cutter,C[9395 Winterforge_Frost_Goblin_Cutter],Grizzard,P[200743305@6022049 Grizzard@shamedy],Guard Break,Pn.Jy04um1,Power,,-23.1135,0
-            ownerIsTheRealSource.Add("Pn.Jy04um1", true);
-
-            // Flame Strike
-            // 13:07:09:12:30:28.4::Rolen Taletreader,P[201260846@7855942 Rolen Taletreader@hehe13],Flame Strike,C[268743 Entity_Flamestrike],Target Dummy,C[268573 Entity_Targetdummy],Flame Strike,Pn.1pwldl,Fire,,424.395,0
-            ownerIsTheRealSource.Add("Pn.1pwldl", true);
-
-            // Arcane Singularity
-            // 13:07:09:14:00:37.8::Natalia Ratova,P[200724456@4597813 Natalia Ratova@candlewolf],Phantasm,C[324 Entity_Arcanesingularity],Chicho,P[201128876@7369799 Chicho@hutch90],Arcane Singularity,Pn.Zlm7uf,ConstantForce,Immune,0,0
-            ownerIsTheRealSource.Add("Pn.Zlm7uf", true);
-
-            // Daunting Light
-            // 13:07:09:14:06:14.6::Deepshanx,P[200977150@5512302 Deepshanx@deepshanx],Daunting Light,C[354 Entity_Dauntinglight_Zone],Rampage,P[200247698@5976052 Rampage@Aggovain],Daunting Light,Pn.7qb24b,Radiant,,2100.64,3546.14
-            ownerIsTheRealSource.Add("Pn.7qb24b", true);
-
-            // Storm Pillar
-            // 13:07:09:19:11:06.4::Devwin,P[200237307@5570467 Devwin@chronalsurge],Storm Pillar,C[245 Entity_Stormpillar_Weak],Orexion,P[200057573@5810203 Orexion@theace02],Storm Pillar,Pn.Vexgm3,Lightning,,175.989,393.029
-            ownerIsTheRealSource.Add("Pn.Vexgm3", true);
-
-            // Bilethorn Weapon
-            // 13:07:10:00:22:49.4::Pristina,P[200701659@6066607 Pristina@alnana],Lodur,C[42 Trickster_Baitandswitch],,*,Bilethorn Weapon,Pn.Nhw1351,Poison,,5.447,6.5
-            ownerIsTheRealSource.Add("Pn.Nhw1351", true);
-
-            // Hallowed Ground
-            // 13:07:08:09:37:04.7::Kaps,P[200709935@7009499 Kaps@kaps181],Hallowed Ground,C[386 Entity_Hallowedground_Zone],Dirty Horror,P[201149078@6317095 Dirty Horror@scooby1361],Moon Touched,Pn.Fb9e3q,HitPoints,,-1429.35,0
-            ownerIsTheRealSource.Add("Pn.Fb9e3q", true);
-
-            // Shard of the Endless Avalanche
-            // 13:07:17:10:24:30.2::zoorhie,P[200847904@7204132 zoorhie@zeldanora13],Shard,C[620 Entity_Shardoftheendlessavalanche],Chloe Oralia,P[200802208@6132862 Chloe Oralia@alluriya],Shardplosion,Pn.7d13go,Arcane,,2283.86,3696.82
-            ownerIsTheRealSource.Add("Pn.7d13go", true);
-
-            // Sudden Storm
-            // 13:07:17:15:28:58.7::Sharee,P[201240783@6333626 Sharee@baelzeden],Domination Point,C[131 Pvp_Capturepoint],Bishop,P[200705682@6899836 Bishop@daytak],Sudden Storm Arc,Pn.6c0tls,Lightning,,94.6794,202.771
-            ownerIsTheRealSource.Add("Pn.6c0tls", true);
-
-            // Sacred Flame
-            // 13:07:13:16:29:33.6::Kratos,P[200351767@6314814 Kratos@symon189],Infiltrator,C[111210 Mindflayer_Infiltrator],Kratos,P[200351767@6314814 Kratos@symon189],Sacred Flame,Pn.Ke4quc1,HitPoints,,-1390.32,0
-            ownerIsTheRealSource.Add("Pn.Ke4quc1", true);
-
-            // Disintegrate Ray
-            // 13:07:18:10:37:22.7::Eye Tyrant,C[1420 Beholder_Eyetyrant],Disintegrate Ray,C[1842 Entity_Beholder_Disintegrateray],Lodur,P[201093074@7545190 Lodur@lodur42],Disintegrate Ray,Pn.G2i22u1,Psychic,Dodge,1328.41,10465
-            ownerIsTheRealSource.Add("Pn.G2i22u1", true);
-
-            // Entity_Beholder_Telekinesisray
-            // 13:07:18:10:37:40.1::Eye Tyrant,C[1420 Beholder_Eyetyrant],C[1858 Entity_Beholder_Telekinesisray],C[1858 Entity_Beholder_Telekinesisray],Akamaru,C[1680 Pet_Dog],,Pn.W557l21,Psychic,,1568.8,7923.25
-            ownerIsTheRealSource.Add("Pn.W557l21", true);
-
-            // Withering Ray
-            // 13:07:18:10:38:55.0::Eye Tyrant,C[1420 Beholder_Eyetyrant],Withering Ray,C[1939 Entity_Beholder_Witheringray],Tristan,C[1547 Pet_Dog],Withering Ray,Pn.U4tl6g1,Necrotic,,1515.7,7578.5
-            ownerIsTheRealSource.Add("Pn.U4tl6g1", true);
-
-            // Petrifying Ray
-            // 13:07:18:10:38:05.9::Eye Tyrant,C[1420 Beholder_Eyetyrant],Petrifying Ray,C[1880 Entity_Beholder_Petrifyingray],Largoevo,P[201228983@6531604 Largoevo@largoevo],Petrifying Ray,Pn.P66a8c,Psychic,,2002.91,10014.5
-            ownerIsTheRealSource.Add("Pn.P66a8c", true);
-
-            // Alacrity
-            // "13:07:19:09:39:39.2::Arejun,P[201154888@7400124 Arejun@aggsemd],Decrepit Skeleton,C[276 Skeleton_Basic_Summoned],Arejun,P[201154888@7400124 Arejun@aggsemd],Alacrity,Pn.Qhl41x,PowerRecharge,ShowPowerDisplayName,-0,0"
-            ownerIsTheRealSource.Add("Pn.Qhl41x", true);
-
-        }
-        
         private string GetIntCommas()
         {
             return ActGlobals.mainTableShowCommas ? "#,0" : "0";
@@ -608,16 +524,6 @@ namespace Parsing_Plugin
                     return flankCount;
                 }
             }
-            /*  BUG
-             *  	
-                [External Code]	
-	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetAAFlankValue(Advanced_Combat_Tracker.AttackType Data) Line 587 + 0xd8 bytes	C#
- 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetDTFlankValue(Advanced_Combat_Tracker.DamageTypeData Data) Line 519 + 0xb bytes	C#
- 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.GetDTFlankPrecValue(Advanced_Combat_Tracker.DamageTypeData Data) Line 536 + 0xb bytes	C#
- 	            Neverwinter.cs-635096821166741155.dll!Parsing_Plugin.NW_Parser.CDCompareFlankDamPrec(Advanced_Combat_Tracker.CombatantData Left, Advanced_Combat_Tracker.CombatantData Right) Line 717 + 0x32 bytes	C#
- 	            [External Code]	
-             *
-             */
 
             int count = Data.Items.Count;
 
@@ -894,7 +800,9 @@ namespace Parsing_Plugin
         void oFormActMain_LogFileChanged(bool IsImport, string NewLogFileName)
         {
             curActionTime = DateTime.MinValue;
-            purgePetCache();
+            //purgePetCache();
+            petOwnerRegistery.Clear();
+            entityOwnerRegistery.Clear();
             magicMissileLastHit.Clear();
         }
 
@@ -906,13 +814,16 @@ namespace Parsing_Plugin
             // purgePetCache();
 
             magicMissileLastHit.Clear();
+            entityOwnerRegistery.Clear();
         }
 
+        /*
         private void purgePetCache()
         {
             petPlayerCache.Clear();
             playerPetCache.Clear();
         }
+        */
 
         // Must match LogLineEventDelegate signature
         void oFormActMain_BeforeLogLineRead(bool isImport, LogLineEventArgs logInfo)
@@ -942,17 +853,36 @@ namespace Parsing_Plugin
             }
 
             // Fix up the ParsedLine to be easy to process.
-            processOwnerSourceTarget(pl);
-            processPetNames(pl);
-            processNames(pl);
-
-            logInfo.detectedType = parseLineType(pl).ToArgb();
+            processBasic(pl);
 
             // Do the real stuff..
             processAction(pl);
         }
 
-        private void processOwnerSourceTarget(ParsedLine line)
+        private void processNamesOST(ParsedLine line)
+        {
+            // Owner, Source (belongs to owner), Target
+            petOwnerRegistery.Register(line);
+            entityOwnerRegistery.Register(line);
+
+            processOwnerSourceNames(line);
+            processTargetNames(line);
+        }
+
+        private void processNamesST(ParsedLine line)
+        {
+            // Source, Target: All independant
+            processSourceNames(line);
+            processTargetNames(line);
+        }
+
+        private void processNamesTargetOnly(ParsedLine line)
+        {
+            // Target only
+            processTargetNames(line);
+        }
+
+        private void processBasic(ParsedLine line)
         {
             //
             // Fix up the ParsedLine.
@@ -967,20 +897,14 @@ namespace Parsing_Plugin
                 line.ownInt = NW_Parser.unkInt;
             }
             else if (line.ownInt[0] == 'P') { line.ownEntityType = EntityType.Player; }
-            else if (line.ownInt[0] == 'C') { line.ownEntityType = EntityType.Creature; }
+            else if (line.ownInt[0] == 'C') 
+            {
+                // There should never be a Pet or Entity in this possition??
+                line.ownEntityType = EntityType.Creature;
+            }
 
 
-            // Some abilties log damage in the form of:
-            // Owner  = owner
-            // Source = target
-            // Target = target
-            //
-            // i.e. the target is the source for standing in the effect and not moving out of it.  The damage source should be the owner for credit.
-            //
-            // we use ownerIsTheRealSource to handle this.
-            //
-
-            if (ownerIsTheRealSource.ContainsKey(line.evtInt) || (line.srcInt == "*"))
+            if (line.srcInt == "*")
             {
                 line.srcDsp = line.ownDsp;
                 line.srcInt = line.ownInt;
@@ -1008,12 +932,19 @@ namespace Parsing_Plugin
             }
             else if (line.srcInt[0] == 'C')
             {
-                // If the <target> is a 'C' type and not equal to the entity in <owner>
-                // then the <target> is a pet of the <owner>.  Does as 'C' ever have
-                // another 'C' type as a pet?  not sure but this should handle it.
-                if (line.srcInt.CompareTo(line.ownInt) != 0)
+                // Basic Pet and Entity detection..
+
+                if (line.srcInt.Contains(" Pet_"))
                 {
                     line.srcEntityType = EntityType.Pet;
+                }
+                else if (line.srcInt.Contains(" Entity_"))
+                {
+                    line.srcEntityType = EntityType.Entity;
+                }
+                else
+                {
+                    line.srcEntityType = EntityType.Creature;
                 }
             }
 
@@ -1034,114 +965,70 @@ namespace Parsing_Plugin
                 line.tgtInt = NW_Parser.unkInt;
             }
             else if (line.tgtInt[0] == 'P') { line.tgtEntityType = EntityType.Player; }
-            else if (line.tgtInt[0] == 'C') { line.tgtEntityType = EntityType.Creature; }
-            // NOTE: C -> Pet lookup is later.
-
-
-            // Defaults for the clean names.
-            line.encAttackerName = line.srcDsp;
-            line.encTargetName = line.tgtDsp;
-            line.unitAttackerName = line.srcDsp;
-            line.unitTargetName = line.tgtDsp;
-        }
-
-        private void processPetNames(ParsedLine line)
-        {
-            // Problem lines:
-            // "13:07:02:13:48:18.1::Kallista Hellbourne,P[200674407@288107 Kallista Hellbourne@tonyleon],,,Sentry,C[1150404 Frost_Goblin_Sentry],Storm Spell,Pn.Zh5vu,Lightning,ShowPowerDisplayName,580.333,0"
-            // "13:07:03:11:47:12.6::Grizzard,P[200743305@6022049 Grizzard@shamedy],Cutter,C[9395 Winterforge_Frost_Goblin_Cutter],Grizzard,P[200743305@6022049 Grizzard@shamedy],Guard Break,Pn.Jy04um1,Power,,-23.1135,0"
-            // "13:07:09:11:01:08.4::Correk,P[201028460@1546238 Correk@Gleyvien],Target Dummy,C[265291 Entity_Targetdummy],,*,Doom!,Pn.F1j0yx1,Radiant,Critical,10557.2,8445.78"
-            // "13:07:09:11:01:59.5::Nasus king,P[201132249@7587600 Nasus king@portazorras],SerGay,C[265715 Pet_Clericdisciple],Target Dummy,C[265291 Entity_Targetdummy],Sacred Flame,Pn.Tegils,Physical,Flank,59.7605,0"
-
-            bool exception = false;
-            bool add = false;
-            PetInfo petInfo = null;
-
-            if (line.srcInt.Contains("Trickster_Baitandswitch"))
+            else if (line.tgtInt[0] == 'C') 
             {
-                // TODO: if this turns into a list then use a dictionary lookup...
-                // Bait and Switch Trickster.
-                // Not a pet.
-                exception = true;
-            }
-            else if (line.evtInt == "Pn.Wypyjw1")
-            {
-                // Knight's Valor
-                // Look's like getting attack by your own pet...
-                // "13:07:18:10:48:34.2::Largoevo,P[201228983@6531604 Largoevo@largoevo],Illusion of Pain,C[2146 Entity_Illusionofpain],Largoevo,P[201228983@6531604 Largoevo@largoevo],Knight's Valor,Pn.Wypyjw1,Physical,Flank,21.7905,110.053"	string
-                if (line.srcEntityType == EntityType.Pet) line.srcEntityType = EntityType.Creature;
-                exception = true;
-            }
+                // Basic Pet and Entity detection..
 
-            // Record owner of all pets we see.
-            if (line.srcEntityType == EntityType.Pet && (!exception))
-            {
-                if (petPlayerCache.TryGetValue(line.srcInt, out petInfo))
+                if (line.tgtInt.Contains(" Pet_"))
                 {
-                    if (petInfo.ownerInt != line.ownInt)
-                    {
-                        // Pet Owner changed...  Not sure if possible... but just in case.
-                        petPlayerCache.Remove(petInfo.petInt);
-                        playerPetCache.Remove(petInfo.ownerInt);
-                        add = true;
-                    }
-                }
-                else
-                {
-                    // Check if this player had another pet registered and clean up.
-                    if (playerPetCache.TryGetValue(line.ownInt, out petInfo))
-                    {
-                        playerPetCache.Remove(line.ownInt);
-                        petPlayerCache.Remove(petInfo.petInt);
-                    }
-
-                    add = true;
-                }
-
-                if (add)
-                {
-                    petInfo = new PetInfo();
-                    petInfo.ownerDsp = line.ownDsp;
-                    petInfo.ownerInt = line.ownInt;
-                    petInfo.petDsp = line.srcDsp;
-                    petInfo.petInt = line.srcInt;
-
-                    petPlayerCache.Add(line.srcInt, petInfo);
-                    playerPetCache.Add(line.ownInt, petInfo);
-                }
-            }
-
-            // Lookup the creature to see if it is a pet.
-            if (line.tgtEntityType == EntityType.Creature)
-            {
-                PetInfo petOwner = null;
-                if (petPlayerCache.TryGetValue(line.tgtInt, out petOwner))
-                {
-                    // Target is a pet.
                     line.tgtEntityType = EntityType.Pet;
-                    line.tgtPetInfo = petOwner;
                 }
-            }
-            else if (line.tgtEntityType == EntityType.Pet)
-            {
-                // If a Pet then get the owner info..
-                // The pet status was set via a '*' in the target...
-                // It should be registered now.
-
-                PetInfo petOwner = null;
-                if (petPlayerCache.TryGetValue(line.tgtInt, out petOwner))
+                else if (line.tgtInt.Contains(" Entity_"))
                 {
-                    line.tgtPetInfo = petOwner;
+                    line.tgtEntityType = EntityType.Entity;
                 }
                 else
                 {
                     line.tgtEntityType = EntityType.Creature;
                 }
             }
+
+            // Defaults for the clean names.
+            line.encAttackerName = line.ownDsp;
+            line.encTargetName = line.tgtDsp;
+            line.unitAttackerName = line.ownDsp;
+            line.unitTargetName = line.tgtDsp;
         }
 
+        private void processOwnerSourceNames(ParsedLine line)
+        {
+            // Owner default:
+            line.encAttackerName = line.ownDsp;
+            line.unitAttackerName = line.ownDsp;
 
-        private void processNames(ParsedLine line)
+            // We assume the owner is the owner of the source for this processing.
+
+            if (line.srcEntityType == EntityType.Pet)
+            {
+                // Use the pet owner name for encounter name and filtering.
+                line.encAttackerName = line.ownDsp;
+
+                // Pet name:
+                line.unitAttackerName = line.srcDsp + " [" + line.ownDsp + "'s Pet]";
+                if (this.checkBox_mergePets.Checked)
+                {
+                    line.unitAttackerName = line.ownDsp;
+                }
+            }
+            else if (line.ownEntityType == EntityType.Creature)
+            {
+                line.encAttackerName = line.ownDsp;
+                String creatureId = line.ownInt.Split()[0].Substring(2);
+
+                if (checkBox_mergeNPC.Checked)
+                {
+                    // Merge all NPCs to a single name.
+                    line.unitAttackerName = line.ownDsp;
+                }
+                else
+                {
+                    // Separate each NPC with its unique creature ID added.
+                    line.unitAttackerName = line.ownDsp + " [" + creatureId + "]";
+                }
+            }
+        }
+
+        private void processSourceNames(ParsedLine line)
         {
             switch (line.srcEntityType)
             {
@@ -1154,23 +1041,69 @@ namespace Parsing_Plugin
 
                 case EntityType.Pet:
                     {
-                        // Use the pet owner name for encounter name and filtering.
-                        line.encAttackerName = line.ownDsp;
+                        OwnerInfo owner = petOwnerRegistery.Resolve(line.srcInt);
 
-                        // Pet name:
-                        line.unitAttackerName = line.srcDsp + " [" + line.ownDsp + "'s Pet]";
-                        if (this.checkBox_mergePets.Checked)
+                        if (owner != null)
                         {
-                            line.unitAttackerName = line.ownDsp;
+
+                            // Use the pet owner name for encounter name and filtering.
+                            line.encAttackerName = owner.ownerDsp;
+
+                            // Pet name:
+                            line.unitAttackerName = line.srcDsp + " [" + owner.ownerDsp + "'s Pet]";
+                            if (this.checkBox_mergePets.Checked)
+                            {
+                                line.unitAttackerName = owner.ownerDsp;
+                            }
+                        }
+                        else
+                        {
+                            // Pet with unknown owner.
+                            // Register it under UNKNOWN until it resolves.
+                            line.encAttackerName = unk;
+                            line.unitAttackerName = unk;
                         }
                         break;
                     }
+                case EntityType.Entity:
+                    {
+                        OwnerInfo owner = entityOwnerRegistery.Resolve(line.srcInt);
+                        if (owner != null)
+                        {
+                            if (owner.ownerEntityType == EntityType.Creature)
+                            {
+                                line.encAttackerName = owner.ownerDsp;
 
+                                if (checkBox_mergeNPC.Checked)
+                                {
+                                    // Merge all NPCs to a single name.
+                                    line.unitAttackerName = owner.ownerDsp;
+                                }
+                                else
+                                {
+                                    // Separate each NPC with its unique creature ID added.
+                                    String creatureId = owner.ownerInt.Split()[0].Substring(2);
+                                    line.unitAttackerName = owner.ownerDsp + " [" + creatureId + "]";
+                                }
+              
+                            }
+                            else
+                            {
+                                line.encAttackerName = owner.ownerDsp;
+                                line.unitAttackerName = owner.ownerDsp;
+                            }
+                        }
+                        else
+                        {
+                            line.encAttackerName = line.srcDsp;
+                            line.unitAttackerName = line.srcDsp;
+                        }
+                        break;
+                    }
                 case EntityType.Creature:
                     {
                         line.encAttackerName = line.srcDsp;
-                        String creatureId = line.srcInt.Split()[0].Substring(2);
-
+                        
                         if (checkBox_mergeNPC.Checked)
                         {
                             // Merge all NPCs to a single name.
@@ -1179,8 +1112,10 @@ namespace Parsing_Plugin
                         else
                         {
                             // Separate each NPC with its unique creature ID added.
+                            String creatureId = line.srcInt.Split()[0].Substring(2);
                             line.unitAttackerName = line.srcDsp + " [" + creatureId + "]";
                         }
+              
                         break;
                     }
 
@@ -1188,10 +1123,15 @@ namespace Parsing_Plugin
                 default:
                     {
                         // Use the defaults.
+                        line.encAttackerName = line.srcDsp;
+                        line.unitAttackerName = line.srcDsp;
                         break;
                     }
             }
+        }
 
+        private void processTargetNames(ParsedLine line)
+        {
             switch (line.tgtEntityType)
             {
                 case EntityType.Player:
@@ -1203,22 +1143,42 @@ namespace Parsing_Plugin
 
                 case EntityType.Pet:
                     {
-                        // Use the pet owner name for encounter name and filtering.
-                        line.encTargetName = line.tgtPetInfo.ownerDsp;
+                        line.tgtOwnerInfo = petOwnerRegistery.Resolve(line.tgtInt);
 
-                        // Pet name:
-                        line.unitTargetName = line.tgtDsp + " [" + line.tgtPetInfo.ownerDsp + "'s Pet]";
-                        if (this.checkBox_mergePets.Checked)
+                        if (line.tgtOwnerInfo != null)
                         {
-                            line.unitTargetName = line.tgtPetInfo.ownerDsp;
+
+                            // Use the pet owner name for encounter name and filtering.
+                            line.encTargetName = line.tgtOwnerInfo.ownerDsp;
+
+                            // Pet name:
+                            line.unitTargetName = line.tgtDsp + " [" + line.tgtOwnerInfo.ownerDsp + "'s Pet]";
+                            if (this.checkBox_mergePets.Checked)
+                            {
+                                line.unitTargetName = line.tgtOwnerInfo.ownerDsp;
+                            }
+                        }
+                        else
+                        {
+                            // Pet with unknown owner.
+                            // Register it under UNKNOWN until it resolves.
+                            line.encTargetName = unk;
+                            line.unitTargetName = unk;
                         }
                         break;
                     }
-
+                case EntityType.Entity:
+                    {
+                        line.tgtOwnerInfo = entityOwnerRegistery.Resolve(line.tgtInt);
+                        if (line.tgtOwnerInfo != null)
+                        {
+                            // What does this mean???
+                        }
+                        break;
+                    }
                 case EntityType.Creature:
                     {
-
-                        if (line.tgtInt.Contains("Trickster_Baitandswitch"))
+                        if (line.tgtInt.Contains(" Trickster_Baitandswitch"))
                         {
                             // Bait and Switch
                             // 13:07:09:21:57:26.9::Dracnia,P[200787912@7184553 Dracnia@tminhtran],,*,Lodur,C[215 Trickster_Baitandswitch],Lashing Blade,Pn.Gji3ar1,Physical,Critical|Flank|Kill,14778.6,15481.4
@@ -1255,272 +1215,345 @@ namespace Parsing_Plugin
             }
         }
 
-        private Color parseLineType(ParsedLine l)
-        {
-
-            // add action Killing
-            if (l.kill)
-            {
-                return Color.Fuchsia;
-            }
-
-            if (l.srcEntityType == EntityType.Pet)
-            {
-                return Color.Aqua;
-            }
-
-            if (l.flags.Contains("Miss") || l.dodge || l.immune)
-            {
-                return Color.Blue;
-            }
-            else if (l.evtInt == "Pn.Vklp251")
-            {
-                //handle cleanse   "Reinigen/Cleanse"
-                return Color.Orange;
-            }
-            else if (l.type == "Power")
-            {
-                return Color.Black;
-            }
-            else if (l.type == "HitPoints" || l.type == "Shield")
-            {
-                if (l.critical)
-                {
-                    return Color.Green;
-                }
-                else
-                {
-                    return Color.DarkGreen;
-                }
-
-            }
-            else if (l.evtInt == "Autodesc.Combatevent.Falling")
-            {
-                return Color.DarkRed;
-            }
-            else
-            {
-                int magBase = (int)Math.Round(l.magBase);
-
-                if (magBase > 0)
-                {
-                    //handle the rest
-                    if (l.critical)
-                    {
-                        return Color.Red;
-                    }
-                    else
-                    {
-                        return Color.DarkRed;
-                    }
-                }
-            }
-
-            return Color.Gray;
-        }
-
-        private void processAction(ParsedLine l)
+        private void processActionHeals(ParsedLine l)
         {
             int magAdj = (int)Math.Round(l.mag * 10);
             int magBaseAdj = (int)Math.Round(l.magBase * 10);
 
-            // Basic attack, magnitude is actual damage dealt taking resists/buffs/debuffs/critical into account, magnitudeBase is damage without these 
-            if (l.evtInt == "Pn.H8hm3x1")
-            {
-                // 13:07:17:10:37:53.5::righteous,P[201081445@5908801 righteous@r1ghteousg],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Cleanse,Pn.H8hm3x1,AttribModExpire,ShowPowerDisplayName,0,0
+            l.logInfo.detectedType = l.critical ? Color.Green.ToArgb() : Color.DarkGreen.ToArgb();
 
-                if (ActGlobals.oFormActMain.InCombat)
-                {
-                    //handle cleanse   "Reinigen/Cleanse"
-                    addCombatAction(l, (int)SwingTypeEnum.CureDispel, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
-                }
-            }
-            else if (l.type == "HitPoints")
+            // Heals can not start an encounter.
+            if (ActGlobals.oFormActMain.InCombat)
             {
-                // Heals can not start an encounter.
-                if (ActGlobals.oFormActMain.InCombat)
-                {
-                    // PVP Rune Heal - Needs some cleanup.  Use the player as the source since they grabbed it.
-                    // Does 'Pn.R0jdk' == PVP RUNE HEAL???
-                    // 13:07:09:14:00:23.2::Rune,C[317 Pvp_Rune_Heal],,*,Mus'Mugen Uhlaalaa,P[201045055@5998737 Mus'Mugen Uhlaalaa@bupfen],Heal,Pn.R0jdk,HitPoints,,-1136.92,0
+                processNamesOST(l);
 
-                    if (l.evtInt == "Pn.R0jdk") // Assume this is PVP Rune Heal for now...
+                // PVP Rune Heal - Needs some cleanup.  Use the player as the source since they grabbed it.
+                // Does 'Pn.R0jdk' == PVP RUNE HEAL???
+                // 13:07:09:14:00:23.2::Rune,C[317 Pvp_Rune_Heal],,*,Mus'Mugen Uhlaalaa,P[201045055@5998737 Mus'Mugen Uhlaalaa@bupfen],Heal,Pn.R0jdk,HitPoints,,-1136.92,0
+
+                if (l.evtInt == "Pn.R0jdk") // Assume this is PVP Rune Heal for now...
+                {
+                    // Use encounter names attacker and target here.  This allows filtering
+                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
                     {
+                        ActGlobals.oFormActMain.AddCombatAction(
+                            (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
+                            "PVP Heal Rune", new Dnum(-magAdj), l.logInfo.detectedTime,
+                            l.ts, l.unitTargetName, l.type);
+                    }
+                }
+                else if (l.evtInt == "Pn.Hemuxg") // PvP Kill downed player
+                {
+                    // PVP finish off
+                    // 13:07:10:09:13:09.2::CamierDerWeisse,P[200083978@5783571 CamierDerWeisse@faru2],,*,FIVEFINGERZ,P[200862049@7260841 FIVEFINGERZ@fivefingerz],Kill,Pn.Hemuxg,HitPoints,,0,0
+
+                    // TODO:  Should this be recorded or ignored...
+                }
+                else if (l.evtInt == "Pn.Qiwkdx1") // Pretty sure this is end of pvp auto heal.
+                {
+                    // TODO: Make sure this is really only an end of pvp match auto heal.
+                    // 13:07:10:11:03:42.1::Nephylia Necromon,P[201238857@7793332 Nephylia Necromon@nephodin],,*,,*,,Pn.Qiwkdx1,HitPoints,,-7240.66,0
+                    // Ignore it.
+                }
+                else if (l.evtInt == "Pn.Dbm4um1") // Campfire
+                {
+                    // Camp fire.
+                    // Give credit to the player for standing in it.
+                    // Note: Trying to eliminate the [unknown] source.
+                    // 13:07:10:11:02:20.6::,,,,Brandeor,P[201267923@5148411 Brandeor@brandeor],Campfire,Pn.Dbm4um1,HitPoints,,-525.321,0
+
+                    // Use encounter names attacker and target here.  This allows filtering
+                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
+                    {
+                        ActGlobals.oFormActMain.AddCombatAction(
+                            (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
+                            l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+                            l.ts, l.unitTargetName, l.type);
+                    }
+                }
+                else if (l.evtInt == "Pn.Zrqjy1") // Chaotic Growth
+                {
+                    // Chaotic Growth - Proc debuff from CW Magic Missile.  Debuffed target AOE heals casters allies.
+                    // But the log shows the debuffed target as the healer...
+                    // Credit should go to the CW that casted the MM, but that is not clear in the logs.
+
+                    // 13:07:09:20:52:51.5::Rassler,P[200973822@6215544 Rassler@lendal4],,*,Rhiyan Torr,P[200010914@5686857 Rhiyan Torr@wyvernonenine],Chaotic Growth,Pn.Zrqjy1,HitPoints,,-215,0
+
+                    // NOTE:  Track the last person to hit each target with magic missile.  Give healing credit to that person.
+                    //        IF that fails then it is a self heal...  Keeps it on the same team in pvp at least.
+
+                    bool handled = false;
+                    ChaoticGrowthInfo cgi = null;
+                    if (magicMissileLastHit.TryGetValue(l.srcInt, out cgi))
+                    {
+                        if (!cgi.triggered)
+                        {
+                            cgi.triggered = true;
+                            cgi.ts = l.logInfo.detectedTime;
+                        }
+
                         // Use encounter names attacker and target here.  This allows filtering
-                        if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
+                        if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, cgi.encName, l.encTargetName))
                         {
                             ActGlobals.oFormActMain.AddCombatAction(
-                                (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
-                                "PVP Heal Rune", new Dnum(-magAdj), l.logInfo.detectedTime,
+                                (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, cgi.unitName,
+                                l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
-                    }
-                    else if (l.evtInt == "Pn.Hemuxg") // PvP Kill downed player
-                    {
-                        // PVP finish off
-                        // 13:07:10:09:13:09.2::CamierDerWeisse,P[200083978@5783571 CamierDerWeisse@faru2],,*,FIVEFINGERZ,P[200862049@7260841 FIVEFINGERZ@fivefingerz],Kill,Pn.Hemuxg,HitPoints,,0,0
 
-                        // TODO:  Should this be recorded or ignored...
+                        handled = true;
                     }
-                    else if (l.evtInt == "Pn.Qiwkdx1") // Pretty sure this is end of pvp auto heal.
-                    {
-                        // TODO: Make sure this is really only an end of pvp match auto heal.
-                        // 13:07:10:11:03:42.1::Nephylia Necromon,P[201238857@7793332 Nephylia Necromon@nephodin],,*,,*,,Pn.Qiwkdx1,HitPoints,,-7240.66,0
-                        // Ignore it.
-                    }
-                    else if (l.evtInt == "Pn.Dbm4um1") // Campfire
-                    {
-                        // Camp fire.
-                        // Give credit to the player for standing in it.
-                        // Note: Trying to eliminate the [unknown] source.
-                        // 13:07:10:11:02:20.6::,,,,Brandeor,P[201267923@5148411 Brandeor@brandeor],Campfire,Pn.Dbm4um1,HitPoints,,-525.321,0
 
+                    if (!handled)
+                    {
                         // Use encounter names attacker and target here.  This allows filtering
                         if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
                         {
                             ActGlobals.oFormActMain.AddCombatAction(
-                                (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
+                                (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, unk,
                                 l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
                     }
-                    else if (l.evtInt == "Pn.Zrqjy1") // Chaotic Growth
-                    {
-                        // Chaotic Growth - Proc debuff from CW Magic Missile.  Debuffed target AOE heals casters allies.
-                        // But the log shows the debuffed target as the healer...
-                        // Credit should go to the CW that casted the MM, but that is not clear in the logs.
+                }
+                else if (l.evtInt == "Pn.R1tsg4")
+                {
+                    // Shocking execution
+                    // There is a HitPoints of value zero that is assioatied with shocking execution.
+                    // Note that the <EvtInt> is different from the actual damaging log entry.
+                    // Just ignore it...
+                    // 13:07:17:10:33:02.1::Lodur,P[201093074@7545190 Lodur@lodur42],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Shocking Execution,Pn.R1tsg4,HitPoints,,0,0
 
-                        // 13:07:09:20:52:51.5::Rassler,P[200973822@6215544 Rassler@lendal4],,*,Rhiyan Torr,P[200010914@5686857 Rhiyan Torr@wyvernonenine],Chaotic Growth,Pn.Zrqjy1,HitPoints,,-215,0
-
-                        // NOTE:  Track the last person to hit each target with magic missile.  Give healing credit to that person.
-                        //        IF that fails then it is a self heal...  Keeps it on the same team in pvp at least.
-
-                        bool handled = false;
-                        ChaoticGrowthInfo cgi = null;
-                        if (magicMissileLastHit.TryGetValue(l.unitAttackerName, out cgi))
-                        {
-                            if (!cgi.triggered)
-                            {
-                                cgi.triggered = true;
-                                cgi.ts = l.logInfo.detectedTime;
-                            }
-
-                            // Use encounter names attacker and target here.  This allows filtering
-                            if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, cgi.encName, l.encTargetName))
-                            {
-                                ActGlobals.oFormActMain.AddCombatAction(
-                                    (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, cgi.unitName,
-                                    l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
-                                    l.ts, l.unitTargetName, l.type);
-                            }
-
-                            handled = true;
-                        }
-
-                        if (!handled)
-                        {
-                            // Use encounter names attacker and target here.  This allows filtering
-                            if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
-                            {
-                                ActGlobals.oFormActMain.AddCombatAction(
-                                    (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, l.unitTargetName,
-                                    l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
-                                    l.ts, l.unitTargetName, l.type);
-                            }
-                        }
-                    }
-                    else if (l.evtInt == "Pn.R1tsg4")
-                    {
-                        // Shocking execution
-                        // There is a HitPoints of value zero that is assioatied with shocking execution.
-                        // Note that the <EvtInt> is different from the actual damaging log entry.
-                        // Just ignore it...
-                        // 13:07:17:10:33:02.1::Lodur,P[201093074@7545190 Lodur@lodur42],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Shocking Execution,Pn.R1tsg4,HitPoints,,0,0
-
-                    }
-                    else
-                    {
-                        // Default heal.
-                        addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
-                    }
+                }
+                else
+                {
+                    // Default heal.
+                    addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
                 }
             }
-            else if (l.type == "Shield")
+        }
+
+        private void processActionShields(ParsedLine l)
+        {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
+            // Shielding goes first and acts like a heal to cancel coming damage.  Attacker has his own damage line.  example:
+
+            // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Shield,,-349.348,-154.608
+            // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Shield,,-559.613,-247.663
+            // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Radiant,,154.608,349.348
+            // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Arcane,,247.663,559.613
+
+            // NOTE:
+            // Notice that the mag and magBase numbers are swap in the shield line verse the damage line.
+            // Therefore the amount shield == magBase ???
+            // The mag is meaningless ???
+            // If mag > magBase on the attack is all damage not shielded ???  (ie high armor pen)
+
+            // NOTE:
+            // NW Patch on 7/17/2013 changed shield to report blocked damage in the mag field.
+            // 13:07:18:10:25:54.2::Miner,C[1445 Mindflayer_Duergarminerthrall],,*,Largoevo,P[201228983@6531604 Largoevo@largoevo],Melee Attack,Pn.M7kie6,Shield,,-242.837,0
+            // Actuall not sure on this....
+            
+            //
+            // Target prevented damage.
+            //
+
+            l.logInfo.detectedType = l.critical ? Color.Green.ToArgb() : Color.DarkGreen.ToArgb();
+
+            processNamesOST(l);
+
+            // Use encounter names attacker and target here.  This allows filtering
+            if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
             {
-                // Shielding goes first and acts like a heal to cancel coming damage.  Attacker has his own damage line.  example:
+                // This is just weird...
+                Dnum shielded = new Dnum((magBaseAdj == 0) ? -magAdj : -magBaseAdj);
 
-                // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Shield,,-349.348,-154.608
-                // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Shield,,-559.613,-247.663
-                // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Radiant,,154.608,349.348
-                // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Arcane,,247.663,559.613
+                // Put the attacker and the attack type in the special field.
+                string special = l.unitAttackerName + " : " + l.attackType;
 
-                // NOTE:
-                // Notice that the mag and magBase numbers are swap in the shield line verse the damage line.
-                // Therefore the amount shield == magBase ???
-                // The mag is meaningless ???
-                // If mag > magBase on the attack is all damage not shielded ???  (ie high armor pen)
-
-                //
-                // Target prevented damage.
-                //
-
-                // Use encounter names attacker and target here.  This allows filtering
-                if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
-                {
-                    // Put the attacker and the attack type in the special field.
-                    string special = l.unitAttackerName + " : " + l.attackType;
-
-                    ActGlobals.oFormActMain.AddCombatAction(
-                        (int)SwingTypeEnum.Healing, false, special, l.unitTargetName,
-                        l.type, new Dnum(-magBaseAdj), l.logInfo.detectedTime,
-                        l.ts, l.unitTargetName, "HitPoints");
-                }
+                ActGlobals.oFormActMain.AddCombatAction(
+                    (int)SwingTypeEnum.Healing, false, special, l.unitTargetName,
+                    l.type, shielded, l.logInfo.detectedTime,
+                    l.ts, l.unitTargetName, "HitPoints");
             }
-            else if (l.type == "Power")
+        }
+
+        private void processActionCleanse(ParsedLine l)
+        {
+            l.logInfo.detectedType = Color.Blue.ToArgb();
+
+            // Cleanse
+            // 13:07:17:10:37:53.5::righteous,P[201081445@5908801 righteous@r1ghteousg],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Cleanse,Pn.H8hm3x1,AttribModExpire,ShowPowerDisplayName,0,0
+
+            if (ActGlobals.oFormActMain.InCombat)
             {
-                if (ActGlobals.oFormActMain.InCombat)
+                processNamesOST(l);
+                addCombatAction(l, (int)SwingTypeEnum.CureDispel, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
+            }
+        }
+
+        private void processActionPower(ParsedLine l)
+        {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            //int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
+            l.logInfo.detectedType = Color.Black.ToArgb();
+
+            if (ActGlobals.oFormActMain.InCombat)
+            {
+                if (l.evtInt == "Pn.Ygyxld") // Critical Power
                 {
+                    // Critical Power
+                    // 13:07:18:10:40:48.3::Tifa,P[200500793@6707245 Tifa@liliiith],Shard,C[2006 Entity_Shardoftheendlessavalanche],,*,Critical Power,Pn.Ygyxld,Power,,-0,0
+                    // This power can trigger on CW's entities... These triggers should be ignored as they are zero effect.
+
+                    if (l.ownInt != l.srcInt)
+                    {
+                        l.logInfo.detectedType = Color.Gray.ToArgb();
+                        return;
+                    }
+                }
+
+                if (l.evtInt == "Pn.He9xu") // Bait and Switch
+                {
+                    // TR - Bait and Switch Trigger
                     // special case: Bait and Switch
                     // 13:07:09:20:53:00.9::Lodur,C[835 Trickster_Baitandswitch],,*,Lodur,P[201093074@7545190 Lodur@lodur42],Trigger,Pn.He9xu,Power,,-0.521139,0
                     // 13:07:09:21:43:30.3::Lodur,C[152 Trickster_Baitandswitch],,*,Lodur,P[201093074@7545190 Lodur@lodur42],Trigger,Pn.He9xu,Power,Immune,0,0
                     // 13:07:10:09:11:08.8::Lodur,C[178 Trickster_Baitandswitch],,*,Lodur,P[201093074@7545190 Lodur@lodur42],Trigger,Pn.He9xu,Power,Immune,0,0
 
+                    processNamesTargetOnly(l);
 
-                    if (l.evtInt == "Pn.He9xu")
+                    // Target is the source as well.
+                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.tgtDsp, l.tgtDsp))
                     {
-                        // TR - Bait and Switch Trigger
-                        // Target is the source as well.
-                        if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.tgtDsp, l.tgtDsp))
-                        {
-                            ActGlobals.oFormActMain.AddCombatAction(
-                                (int)SwingTypeEnum.PowerHealing, l.critical, "", "Trickster [" + l.tgtDsp + "]",
-                                "Bait and Switch", new Dnum(-magAdj), l.logInfo.detectedTime,
-                                l.ts, l.tgtDsp, l.type);
-                        }
+                        ActGlobals.oFormActMain.AddCombatAction(
+                            (int)SwingTypeEnum.PowerHealing, l.critical, "", "Trickster [" + l.tgtDsp + "]",
+                            "Bait and Switch", new Dnum(-magAdj), l.logInfo.detectedTime,
+                            l.ts, l.tgtDsp, l.type);
                     }
-                    else
+                }
+                else if (l.evtInt == "Pn.Jy04um1") // Guard Break
+                {
+                    // Guard Break
+                    // 13:07:18:10:50:08.7::Largoevo,P[201228983@6531604 Largoevo@largoevo],Bodyguard,C[2175 Mindflayer_Thoonhulk_Eventbodyguard],Largoevo,P[201228983@6531604 Largoevo@largoevo],Guard Break,Pn.Jy04um1,Power,,-28.8571,0
+                    // Owner    = Guardian Fighter  [Attacker]
+                    // source   = Target enemy      [Special]
+                    // target   = Guardian Fighter  [Victim]
+                    // 
+                    // NOTE: Do not assume source is a pet of owner.  Source could be a pet or fake pet.  Resolve fake pet to owner.
+
+                    processNamesST(l);
+
+                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.unitTargetName, l.unitTargetName))
                     {
-                        // Normal Power case...
-                        addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
+                        ActGlobals.oFormActMain.AddCombatAction(
+                            (int)SwingTypeEnum.PowerHealing, l.critical, l.unitAttackerName, l.unitTargetName,
+                            l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+                            l.ts, l.unitTargetName, l.type);
                     }
+                }
+                else if (l.evtInt == "Pn.Wxao05") // Maelstrom of Chaos
+                {
+                    // Maelstrom of Chaos
+                    // 13:07:18:10:37:50.5::Tifa,P[200500793@6707245 Tifa@liliiith],,*,,*,Maelstrom of Chaos,Pn.Wxao05,Power,,500,0
+                    // Canceling this power early will cost half of your Action Points.
+
+                    // Ignore this for now.
+                }
+                else
+                {
+                    // Normal Power case...
+                    processNamesOST(l);
+                    addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
                 }
             }
-            else if (l.evtInt == "Autodesc.Combatevent.Falling")
+        }
+
+        private void processActionSPDN(ParsedLine l)
+        {
+            // Handle all the buff and proc buffs/debuffs
+            // type: PowerRecharge, Null, Alacrity, CombatAdvantage, Lightning(Storm Spell), CritSeverity, ...
+
+            l.logInfo.detectedType = Color.DarkTurquoise.ToArgb();
+
+            if (l.evtInt == "Pn.Fwolu") // Chaotic Growth
             {
+                // Chaotic Growth (Fixed in latest NW patch)
+                // 13:07:18:10:51:58.2::Tifa,P[200500793@6707245 Tifa@liliiith],,*,Guard,C[2205 Mindflayer_Duergarguardthrall],Chaotic Growth,Pn.Fwolu,Null,ShowPowerDisplayName,0,0
+
+                l.logInfo.detectedType = Color.DarkOliveGreen.ToArgb();
+
+                processNamesOST(l);
+
+                ChaoticGrowthInfo cgi = null;
+                if (magicMissileLastHit.TryGetValue(l.tgtInt, out cgi))
+                {
+                    cgi.triggered = true;
+                    cgi.ts = l.logInfo.detectedTime;
+                    cgi.encName = l.encAttackerName;
+                    cgi.unitName = l.unitAttackerName;
+                }
+
                 if (ActGlobals.oFormActMain.InCombat)
                 {
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
                 }
+            }
+            else if (l.evtInt == "Pn.Zh5vu")
+            {
+                // Storm Spell
+                // 13:07:18:10:49:10.1::Tifa,P[200500793@6707245 Tifa@liliiith],,*,Scourge,C[2143 Mindflayer_Scourge],Storm Spell,Pn.Zh5vu,Lightning,ShowPowerDisplayName,583.917,0
+
+                // Ignore this as there is a damage log line to go with it.
             }
             else
             {
-                //handle the rest
-                //addCombatAction(l.logInfo.detectedTime, tempOwnerDsp, tempTargetDsp, l.swingType, l.critical, l.special, l.attackType, (int)Math.Round(l.mag), l.type, l.ts);
+                // Default
 
-                if ((l.evtInt == "Pn.3t6cw8") && (magBaseAdj > 0)) // Magic Missile
+                if (ActGlobals.oFormActMain.InCombat)
+                {
+                    processNamesOST(l);
+                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
+                }
+            }
+        }
+
+        private void processActionDamage(ParsedLine l)
+        {
+            int magAdj = (int)Math.Round(l.mag * 10);
+            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+
+            l.logInfo.detectedType = l.critical ? Color.Red.ToArgb() : Color.DarkRed.ToArgb();
+
+            
+            if (l.evtInt == "Autodesc.Combatevent.Falling")
+            {
+                // Falling damage does not start combat...
+                if (ActGlobals.oFormActMain.InCombat)
+                {
+                    processNamesOST(l);
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                }
+            }
+            else if (l.evtInt == "Pn.Wypyjw1") // Knight's Valor,
+            {
+                // "13:07:18:10:30:48.3::Largoevo,P[201228983@6531604 Largoevo@largoevo],Ugan the Abominable,C[1469 Mindflayer_Miniboss_Ugan],Largoevo,P[201228983@6531604 Largoevo@largoevo],Knight's Valor,Pn.Wypyjw1,Physical,,449.42,1195.48
+                // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
+
+                processNamesST(l);
+                addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+            }
+            else
+            {
+                processNamesOST(l);
+
+                if ((l.evtInt == "Pn.3t6cw8") && (magAdj > 0)) // Magic Missile
                 {
                     ChaoticGrowthInfo cgi = null;
-                    if (magicMissileLastHit.TryGetValue(l.unitTargetName, out cgi))
+                    if (magicMissileLastHit.TryGetValue(l.tgtInt, out cgi))
                     {
                         if (cgi.triggered)
                         {
@@ -1546,39 +1579,53 @@ namespace Parsing_Plugin
                         cgi.triggered = false;
                         cgi.ts = l.logInfo.detectedTime;
 
-                        magicMissileLastHit.Add(l.unitTargetName, cgi);
+                        magicMissileLastHit.Add(l.tgtInt, cgi);
                     }
                 }
 
-                // Knight's Valor,
-                if (l.evtInt == "Pn.Wypyjw1")
-                {
-                    // "13:07:18:10:30:48.3::Largoevo,P[201228983@6531604 Largoevo@largoevo],Ugan the Abominable,C[1469 Mindflayer_Miniboss_Ugan],Largoevo,P[201228983@6531604 Largoevo@largoevo],Knight's Valor,Pn.Wypyjw1,Physical,,449.42,1195.48
-                    // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
+                //
+                // Note:  There seems to be many cases where dmgBase == 0 while damage is applied.
+                //
 
-                    l.encAttackerName = l.srcDsp;
-                    l.unitAttackerName = l.srcDsp;
+                /*
+                if (l.flags.Contains("Miss"))
+                {
+                    // TODO:  Not sure I have ever seen a "miss" in a log.  This actually valid?
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type, magBaseAdj);
                 }
+                else 
+                */
 
-                if (magBaseAdj > 0)
+                if (l.immune)
                 {
-
-                    if (l.flags.Contains("Miss"))
+                    if ((magAdj == 0) && (magBaseAdj == 0))
                     {
-                        // TODO:  Not sure I have ever seen a "miss" in a log.  This actually valid?
-                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type, magBaseAdj);
+                        // 13:07:18:10:49:21.6::Tristan,C[2120 Pet_Dog],,*,Oll'noth the Dominator,C[1997 Mindflayer_Eventboss],Takedown,Pn.Ebxsjf,KnockBack,Immune,0,0
+
+                        // Ignore these for now...
+                        l.logInfo.detectedType = Color.Gray.ToArgb();
                     }
-                    else if (l.immune)
+                    else
                     {
                         // Generally damaging attacks have mag=0 and magBase > 0 when Immune.
+                        l.logInfo.detectedType = Color.Maroon.ToArgb();
                         addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type, magBaseAdj);
                     }
-                    else if (l.dodge)
+                }
+                else if (l.dodge)
+                {
+                    // It really looks like Dodge does not stop all damage - just reduces it by about 80%...
+                    // I have seen damaging attacks that are both Dodge and Kill in the flags.  
+                    // So the target dodged but still died.
+                    l.logInfo.detectedType = Color.Maroon.ToArgb();
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                }
+                else
+                {
+                    if ((magAdj == 0) && (magBaseAdj == 0))
                     {
-                        // It really looks like Dodge does not stop all damage - just reduces it by about 80%...
-                        // I have seen damaging attacks that are both Dodge and Kill in the flags.  
-                        // So the target dodged but still died.
-                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                        // Ignore it...  This is generally a Non-Target entity getting AOE'd...
+                        l.logInfo.detectedType = Color.Gray.ToArgb();
                     }
                     else
                     {
@@ -1586,28 +1633,48 @@ namespace Parsing_Plugin
                         addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
                     }
                 }
-                else
-                {
-                    if (l.evtInt == "Pn.Yswhgl1")
-                    {
-                        // Shocking Execution
-                        // It bypasses all defenses.  This, it turns out, leads to a non-zero damage and a 0 base damage.
-                        // 13:07:17:10:33:01.9::Lodur,P[201093074@7545190 Lodur@lodur42],,*,KingOfSwordsx2,P[201247997@5290133 KingOfSwordsx2@sepherosrox],Shocking Execution,Pn.Yswhgl1,Physical,Critical|Flank|Kill,11887.1,0
+            }
+        }
 
-                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type);
-                    }
-                    else
-                    {
-                        unknownLineCount++;
-                    }
-                }
+        private void processAction(ParsedLine l)
+        {
+            l.logInfo.detectedType = Color.Gray.ToArgb();
+
+            if (l.type == "HitPoints")
+            {
+                processActionHeals(l);
+            }
+            else if (l.type == "Shield")
+            {
+                processActionShields(l);
+            }
+            else if (l.type == "AttribModExpire") // Cleanse
+            {
+                processActionCleanse(l);
+            }
+            else if (l.type == "Power")
+            {
+                processActionPower(l);
+            }
+            else if (l.showPowerDisplayName)
+            {
+                // Non-damaging effects.
+                processActionSPDN(l);
+            }
+            else
+            {
+                // What is left should all be damage.
+                processActionDamage(l);
             }
 
             // add action Killing
             if (l.kill)
             {
+                l.logInfo.detectedType = Color.Fuchsia.ToArgb();
+
                 // Clean from last MM hit.
-                magicMissileLastHit.Remove(l.unitTargetName);
+                // The Kill can come right before a proc.  Ordering isssue.
+                // magicMissileLastHit.Remove(l.tgtInt);
 
                 // TODO: use tgtDsp or unitTargetName?
                 ActGlobals.oFormSpellTimers.RemoveTimerMods(l.tgtDsp);
@@ -1751,12 +1818,158 @@ namespace Parsing_Plugin
 
     }
 
-    internal class PetInfo
+    internal class OwnerInfo
     {
         public string ownerDsp;
         public string ownerInt;
+        public EntityType ownerEntityType;
         public string petDsp;
         public string petInt;
+    }
+
+    internal interface OwnerRegistery
+    {
+        void Clear();
+        void Register(ParsedLine line);
+        OwnerInfo Resolve(string nameInt);
+    }
+
+    internal class PetOwnerRegistery : OwnerRegistery
+    {
+        private Dictionary<string, OwnerInfo> petPlayerCache = new Dictionary<string, OwnerInfo>();
+        private Dictionary<string, OwnerInfo> playerPetCache = new Dictionary<string, OwnerInfo>();
+
+        public void Clear()
+        {
+            petPlayerCache.Clear();
+            playerPetCache.Clear();
+        }
+
+        public void Register(ParsedLine line)
+        {
+            // Problem lines:
+            // "13:07:02:13:48:18.1::Kallista Hellbourne,P[200674407@288107 Kallista Hellbourne@tonyleon],,,Sentry,C[1150404 Frost_Goblin_Sentry],Storm Spell,Pn.Zh5vu,Lightning,ShowPowerDisplayName,580.333,0"
+            // "13:07:03:11:47:12.6::Grizzard,P[200743305@6022049 Grizzard@shamedy],Cutter,C[9395 Winterforge_Frost_Goblin_Cutter],Grizzard,P[200743305@6022049 Grizzard@shamedy],Guard Break,Pn.Jy04um1,Power,,-23.1135,0"
+            // "13:07:09:11:01:08.4::Correk,P[201028460@1546238 Correk@Gleyvien],Target Dummy,C[265291 Entity_Targetdummy],,*,Doom!,Pn.F1j0yx1,Radiant,Critical,10557.2,8445.78"
+            // "13:07:09:11:01:59.5::Nasus king,P[201132249@7587600 Nasus king@portazorras],SerGay,C[265715 Pet_Clericdisciple],Target Dummy,C[265291 Entity_Targetdummy],Sacred Flame,Pn.Tegils,Physical,Flank,59.7605,0"
+            
+            bool add = false;
+            OwnerInfo OwnerInfo = null;
+
+            // Record owner of all pets we see.
+            if (line.srcEntityType == EntityType.Pet)
+            {
+                if (petPlayerCache.TryGetValue(line.srcInt, out OwnerInfo))
+                {
+                    if (OwnerInfo.ownerInt != line.ownInt)
+                    {
+                        // Pet Owner changed...  Not sure if possible... but just in case.
+                        petPlayerCache.Remove(OwnerInfo.petInt);
+                        playerPetCache.Remove(OwnerInfo.ownerInt);
+                        add = true;
+                    }
+                }
+                else
+                {
+                    // Check if this player had another pet registered and clean up.
+                    // Only one pet is allowed.
+                    if (playerPetCache.TryGetValue(line.ownInt, out OwnerInfo))
+                    {
+                        playerPetCache.Remove(line.ownInt);
+                        petPlayerCache.Remove(OwnerInfo.petInt);
+                    }
+
+                    add = true;
+                }
+
+                if (add)
+                {
+                    OwnerInfo = new OwnerInfo();
+                    OwnerInfo.ownerDsp = line.ownDsp;
+                    OwnerInfo.ownerInt = line.ownInt;
+                    OwnerInfo.ownerEntityType = line.ownEntityType;
+                    OwnerInfo.petDsp = line.srcDsp;
+                    OwnerInfo.petInt = line.srcInt;
+
+                    petPlayerCache.Add(line.srcInt, OwnerInfo);
+                    playerPetCache.Add(line.ownInt, OwnerInfo);
+                }
+            }
+        }
+
+        public OwnerInfo Resolve(string nameInt)
+        {
+            // Lookup the creature to see if it is a pet.
+
+            OwnerInfo petOwner = null;
+            if (petPlayerCache.TryGetValue(nameInt, out petOwner))
+            {
+                return petOwner;
+            }
+            
+            return null;
+        }
+
+    }
+
+    internal class EntityOwnerRegistery : OwnerRegistery
+    {
+        private Dictionary<string, OwnerInfo> entityPlayerCache = new Dictionary<string, OwnerInfo>();
+
+        public void Clear()
+        {
+            entityPlayerCache.Clear();
+        }
+
+        public void Register(ParsedLine line)
+        {
+            bool add = false;
+            OwnerInfo OwnerInfo = null;
+
+            // Record owner of all entities we see.
+            if (line.srcEntityType == EntityType.Entity)
+            {
+                if (entityPlayerCache.TryGetValue(line.srcInt, out OwnerInfo))
+                {
+                    if (OwnerInfo.ownerInt != line.ownInt)
+                    {
+                        // Pet Owner changed...  Not sure if possible... but just in case.
+                        entityPlayerCache.Remove(OwnerInfo.petInt);
+                        add = true;
+                    }
+                }
+                else
+                {
+                    // Multiple entities may be owned by same owner.
+                    add = true;
+                }
+
+                if (add)
+                {
+                    OwnerInfo = new OwnerInfo();
+                    OwnerInfo.ownerDsp = line.ownDsp;
+                    OwnerInfo.ownerInt = line.ownInt;
+                    OwnerInfo.ownerEntityType = line.ownEntityType;
+                    OwnerInfo.petDsp = line.srcDsp;
+                    OwnerInfo.petInt = line.srcInt;
+
+                    entityPlayerCache.Add(line.srcInt, OwnerInfo);
+                }
+            }
+        }
+
+        public OwnerInfo Resolve(string nameInt)
+        {
+            // Lookup the creature to see if it is a pet.
+
+            OwnerInfo petOwner = null;
+            if (entityPlayerCache.TryGetValue(nameInt, out petOwner))
+            {
+                return petOwner;
+            }
+
+            return null;
+        }
     }
 
     internal class ChaoticGrowthInfo
@@ -1772,6 +1985,7 @@ namespace Parsing_Plugin
         Player,
         Pet,
         Creature,
+        Entity,
         Unknown
     }
 
@@ -1788,7 +2002,7 @@ namespace Parsing_Plugin
         public String ownDsp, ownInt, srcDsp, srcInt, tgtDsp, tgtInt, evtDsp, evtInt;
         public String type, attackType, special, flags;
         public int swingType, ts;
-        public bool critical, flank, dodge, immune, kill;
+        public bool critical, flank, dodge, immune, kill, showPowerDisplayName;
         public float mag, magBase;
         public bool error;
 
@@ -1797,7 +2011,7 @@ namespace Parsing_Plugin
         //
 
         public EntityType ownEntityType, srcEntityType, tgtEntityType;
-        public PetInfo tgtPetInfo = null;
+        public OwnerInfo tgtOwnerInfo = null;
 
         // The attacker name for encounters
         public String encAttackerName;
@@ -1877,6 +2091,9 @@ namespace Parsing_Plugin
                             break;
                         case "Kill":
                             kill = true;
+                            break;
+                        case "ShowPowerDisplayName":
+                            showPowerDisplayName = true;
                             break;
 
                         default:
