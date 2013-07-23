@@ -1389,7 +1389,7 @@ namespace Parsing_Plugin
                 ActGlobals.oFormActMain.AddCombatAction(
                     (int)SwingTypeEnum.Healing, false, special, l.unitTargetName,
                     l.type, shielded, l.logInfo.detectedTime,
-                    l.ts, l.unitTargetName, "HitPoints");
+                    l.ts, l.unitTargetName, l.type);
             }
         }
 
