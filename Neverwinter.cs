@@ -177,7 +177,10 @@ namespace Parsing_Plugin
         private EntityOwnerRegistery entityOwnerRegistery = new EntityOwnerRegistery();
 
         // For tracking source of Chaotic Growth heals.
-        internal Dictionary<string, ChaoticGrowthInfo> magicMissileLastHit = new Dictionary<string, ChaoticGrowthInfo>();
+        private Dictionary<string, ChaoticGrowthInfo> magicMissileLastHit = new Dictionary<string, ChaoticGrowthInfo>();
+
+        private Dictionary<string, bool> playerCharacterNames = new Dictionary<string, bool>();
+        private bool playersCharacterFound = false;
 
         // Instant when the current combat action took place
         private DateTime curActionTime = DateTime.MinValue;
@@ -275,6 +278,9 @@ namespace Parsing_Plugin
             ActGlobals.oFormActMain.LogFileChanged += new LogFileChangedDelegate(oFormActMain_LogFileChanged);
 
             // InitializeOwnerIsTheRealSource();
+
+            playerCharacterNames.Add("Lodur", true);
+            playerCharacterNames.Add("Fiolnir", true);
 
             FixupCombatDataStructures();
 
@@ -804,6 +810,7 @@ namespace Parsing_Plugin
             petOwnerRegistery.Clear();
             entityOwnerRegistery.Clear();
             magicMissileLastHit.Clear();
+            playersCharacterFound = false;
         }
 
         void oFormActMain_OnCombatEnd(bool isImport, CombatToggleEventArgs encounterInfo)
@@ -815,15 +822,8 @@ namespace Parsing_Plugin
 
             magicMissileLastHit.Clear();
             entityOwnerRegistery.Clear();
+            playersCharacterFound = false;
         }
-
-        /*
-        private void purgePetCache()
-        {
-            petPlayerCache.Clear();
-            playerPetCache.Clear();
-        }
-        */
 
         // Must match LogLineEventDelegate signature
         void oFormActMain_BeforeLogLineRead(bool isImport, LogLineEventArgs logInfo)
@@ -854,6 +854,19 @@ namespace Parsing_Plugin
 
             // Fix up the ParsedLine to be easy to process.
             processBasic(pl);
+
+            // Detect Player names..
+            if ( ! (playersCharacterFound || isImport ) )
+            {
+                if (pl.ownEntityType == EntityType.Player)
+                {
+                    if (playerCharacterNames.ContainsKey(pl.ownDsp))
+                    {
+                        ActGlobals.charName = pl.ownDsp;
+                        playersCharacterFound = true;
+                    }
+                }
+            }
 
             // Do the real stuff..
             processAction(pl);
