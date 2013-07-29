@@ -1,3 +1,10 @@
+# ACT Build Env - Not included
+#
+NeverwinterACT/
+Properties/
+NeverwinterParsing.*
+*.resx
+
 #################
 ## Eclipse
 #################

@@ -279,8 +279,8 @@ namespace Parsing_Plugin
 
             // InitializeOwnerIsTheRealSource();
 
-            playerCharacterNames.Add("Lodur", true);
-            playerCharacterNames.Add("Fiolnir", true);
+            //playerCharacterNames.Add("Lodur", true);
+            //playerCharacterNames.Add("Fiolnir", true);
 
             FixupCombatDataStructures();
 
