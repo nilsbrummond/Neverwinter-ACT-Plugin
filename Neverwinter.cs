@@ -12,19 +12,12 @@ using System.Text.RegularExpressions;
 using System.Globalization;
 using System.Net;
 
-/*
-TODO:
-- set encounter name
-- set character name
-- power replenish shall not be inc damage
-- activate help text in options window
-
-*/
 
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
 [assembly: AssemblyVersion("0.0.8.0")]
+
 
 /* Version History - npb
  * 0.0.8.0 - 2013/7/20
@@ -55,6 +48,8 @@ TODO:
  * 0.0.1.0 - 2013/04/05
  *   - initial alpha version
 */
+
+
 namespace Parsing_Plugin
 {
     public class NW_Parser : UserControl, IActPluginV1
@@ -77,10 +72,19 @@ namespace Parsing_Plugin
         private void InitializeComponent()
         {
             this.label1 = new System.Windows.Forms.Label();
-            this.label2 = new System.Windows.Forms.Label();
             this.checkBox_mergeNPC = new System.Windows.Forms.CheckBox();
             this.checkBox_mergePets = new System.Windows.Forms.CheckBox();
             this.checkBox_flankSkill = new System.Windows.Forms.CheckBox();
+            this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.label2 = new System.Windows.Forms.Label();
+            this.button_clearAll = new System.Windows.Forms.Button();
+            this.button_remove = new System.Windows.Forms.Button();
+            this.button_add = new System.Windows.Forms.Button();
+            this.textBox_player = new System.Windows.Forms.TextBox();
+            this.listBox_players = new System.Windows.Forms.ListBox();
+            this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.groupBox1.SuspendLayout();
+            this.groupBox2.SuspendLayout();
             this.SuspendLayout();
             // 
             // label1
@@ -93,55 +97,138 @@ namespace Parsing_Plugin
             this.label1.TabIndex = 0;
             this.label1.Text = "Neverwinter parser plugin Options";
             // 
-            // label2
-            // 
-            this.label2.AutoSize = true;
-            this.label2.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.25F, System.Drawing.FontStyle.Underline, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label2.Location = new System.Drawing.Point(12, 40);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(43, 13);
-            this.label2.TabIndex = 1;
-            this.label2.Text = "Options";
-            // 
             // checkBox_mergeNPC
             // 
             this.checkBox_mergeNPC.AutoSize = true;
-            this.checkBox_mergeNPC.Location = new System.Drawing.Point(15, 56);
+            this.checkBox_mergeNPC.Location = new System.Drawing.Point(6, 21);
             this.checkBox_mergeNPC.Name = "checkBox_mergeNPC";
             this.checkBox_mergeNPC.Size = new System.Drawing.Size(291, 17);
             this.checkBox_mergeNPC.TabIndex = 2;
             this.checkBox_mergeNPC.Text = "Merge all NPC combatants by removing NPC unique IDs";
             this.checkBox_mergeNPC.UseVisualStyleBackColor = true;
+            this.checkBox_mergeNPC.MouseEnter += new System.EventHandler(this.checkBox_mergeNPC_MouseEnter);
+            this.checkBox_mergeNPC.MouseLeave += new System.EventHandler(this.checkBox_mergeNPC_MouseLeave);
             // 
             // checkBox_mergePets
             // 
             this.checkBox_mergePets.AutoSize = true;
-            this.checkBox_mergePets.Location = new System.Drawing.Point(15, 72);
+            this.checkBox_mergePets.Location = new System.Drawing.Point(6, 44);
             this.checkBox_mergePets.Name = "checkBox_mergePets";
             this.checkBox_mergePets.Size = new System.Drawing.Size(284, 17);
             this.checkBox_mergePets.TabIndex = 3;
             this.checkBox_mergePets.Text = "Merge all pet data to owner and remove pet from listing";
             this.checkBox_mergePets.UseVisualStyleBackColor = true;
+            this.checkBox_mergePets.MouseEnter += new System.EventHandler(this.checkBox_mergePets_MouseEnter);
+            this.checkBox_mergePets.MouseLeave += new System.EventHandler(this.checkBox_mergePets_MouseLeave);
             // 
             // checkBox_flankSkill
             // 
             this.checkBox_flankSkill.AutoSize = true;
-            this.checkBox_flankSkill.Location = new System.Drawing.Point(15, 88);
+            this.checkBox_flankSkill.Location = new System.Drawing.Point(6, 67);
             this.checkBox_flankSkill.Name = "checkBox_flankSkill";
             this.checkBox_flankSkill.Size = new System.Drawing.Size(213, 17);
             this.checkBox_flankSkill.TabIndex = 4;
             this.checkBox_flankSkill.Text = "Split skills in to flank and non-flank skills";
             this.checkBox_flankSkill.UseVisualStyleBackColor = true;
+            this.checkBox_flankSkill.MouseEnter += new System.EventHandler(this.checkBox_flankSkill_MouseEnter);
+            this.checkBox_flankSkill.MouseLeave += new System.EventHandler(this.checkBox_flankSkill_MouseLeave);
+            // 
+            // groupBox1
+            // 
+            this.groupBox1.Controls.Add(this.label2);
+            this.groupBox1.Controls.Add(this.button_clearAll);
+            this.groupBox1.Controls.Add(this.button_remove);
+            this.groupBox1.Controls.Add(this.button_add);
+            this.groupBox1.Controls.Add(this.textBox_player);
+            this.groupBox1.Controls.Add(this.listBox_players);
+            this.groupBox1.Location = new System.Drawing.Point(15, 147);
+            this.groupBox1.Name = "groupBox1";
+            this.groupBox1.Size = new System.Drawing.Size(362, 188);
+            this.groupBox1.TabIndex = 5;
+            this.groupBox1.TabStop = false;
+            this.groupBox1.Text = "Player Detection";
+            this.groupBox1.MouseEnter += new System.EventHandler(this.groupBox1_MouseEnter);
+            this.groupBox1.MouseLeave += new System.EventHandler(this.groupBox1_MouseLeave);
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(184, 19);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(109, 13);
+            this.label2.TabIndex = 6;
+            this.label2.Text = "Add / Remove Player";
+            // 
+            // button_clearAll
+            // 
+            this.button_clearAll.Location = new System.Drawing.Point(296, 64);
+            this.button_clearAll.Name = "button_clearAll";
+            this.button_clearAll.Size = new System.Drawing.Size(60, 23);
+            this.button_clearAll.TabIndex = 9;
+            this.button_clearAll.Text = "Clear All";
+            this.button_clearAll.UseVisualStyleBackColor = true;
+            this.button_clearAll.Click += new System.EventHandler(this.button_clearAll_Click);
+            // 
+            // button_remove
+            // 
+            this.button_remove.Location = new System.Drawing.Point(225, 64);
+            this.button_remove.Name = "button_remove";
+            this.button_remove.Size = new System.Drawing.Size(65, 23);
+            this.button_remove.TabIndex = 8;
+            this.button_remove.Text = "Remove";
+            this.button_remove.UseVisualStyleBackColor = true;
+            this.button_remove.Click += new System.EventHandler(this.button_remove_Click);
+            // 
+            // button_add
+            // 
+            this.button_add.Location = new System.Drawing.Point(185, 64);
+            this.button_add.Name = "button_add";
+            this.button_add.Size = new System.Drawing.Size(34, 23);
+            this.button_add.TabIndex = 7;
+            this.button_add.Text = "Add";
+            this.button_add.UseVisualStyleBackColor = true;
+            this.button_add.Click += new System.EventHandler(this.button_add_Click);
+            // 
+            // textBox_player
+            // 
+            this.textBox_player.Location = new System.Drawing.Point(185, 38);
+            this.textBox_player.Name = "textBox_player";
+            this.textBox_player.Size = new System.Drawing.Size(171, 20);
+            this.textBox_player.TabIndex = 6;
+            this.textBox_player.TextChanged += new System.EventHandler(this.textBox_player_TextChanged);
+            // 
+            // listBox_players
+            // 
+            this.listBox_players.FormattingEnabled = true;
+            this.listBox_players.Location = new System.Drawing.Point(6, 19);
+            this.listBox_players.Name = "listBox_players";
+            this.listBox_players.Size = new System.Drawing.Size(172, 160);
+            this.listBox_players.TabIndex = 5;
+            this.listBox_players.SelectedIndexChanged += new System.EventHandler(this.listBox_players_SelectedIndexChanged);
+            // 
+            // groupBox2
+            // 
+            this.groupBox2.Controls.Add(this.checkBox_mergeNPC);
+            this.groupBox2.Controls.Add(this.checkBox_mergePets);
+            this.groupBox2.Controls.Add(this.checkBox_flankSkill);
+            this.groupBox2.Location = new System.Drawing.Point(15, 41);
+            this.groupBox2.Name = "groupBox2";
+            this.groupBox2.Size = new System.Drawing.Size(362, 100);
+            this.groupBox2.TabIndex = 6;
+            this.groupBox2.TabStop = false;
+            this.groupBox2.Text = "Options";
             // 
             // NW_Parser
             // 
-            this.Controls.Add(this.checkBox_flankSkill);
-            this.Controls.Add(this.checkBox_mergePets);
-            this.Controls.Add(this.checkBox_mergeNPC);
-            this.Controls.Add(this.label2);
+            this.Controls.Add(this.groupBox2);
+            this.Controls.Add(this.groupBox1);
             this.Controls.Add(this.label1);
             this.Name = "NW_Parser";
-            this.Size = new System.Drawing.Size(650, 150);
+            this.Size = new System.Drawing.Size(399, 380);
+            this.groupBox1.ResumeLayout(false);
+            this.groupBox1.PerformLayout();
+            this.groupBox2.ResumeLayout(false);
+            this.groupBox2.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -150,10 +237,17 @@ namespace Parsing_Plugin
         #endregion
 
         private System.Windows.Forms.Label label1;
-        private System.Windows.Forms.Label label2;
         private System.Windows.Forms.CheckBox checkBox_mergeNPC;
         private System.Windows.Forms.CheckBox checkBox_mergePets;
         private System.Windows.Forms.CheckBox checkBox_flankSkill;
+        private GroupBox groupBox1;
+        private TextBox textBox_player;
+        private ListBox listBox_players;
+        private GroupBox groupBox2;
+        private Button button_clearAll;
+        private Button button_remove;
+        private Button button_add;
+        private Label label2;
 
         #endregion
 
@@ -177,10 +271,7 @@ namespace Parsing_Plugin
         private EntityOwnerRegistery entityOwnerRegistery = new EntityOwnerRegistery();
 
         // For tracking source of Chaotic Growth heals.
-        private Dictionary<string, ChaoticGrowthInfo> magicMissileLastHit = new Dictionary<string, ChaoticGrowthInfo>();
-
-        private Dictionary<string, bool> playerCharacterNames = new Dictionary<string, bool>();
-        private bool playersCharacterFound = false;
+        internal Dictionary<string, ChaoticGrowthInfo> magicMissileLastHit = new Dictionary<string, ChaoticGrowthInfo>();
 
         // Instant when the current combat action took place
         private DateTime curActionTime = DateTime.MinValue;
@@ -226,7 +317,6 @@ namespace Parsing_Plugin
                 pluginScreenSpace.Controls.Add(lblConfig);
             }
             ActGlobals.oFormActMain.OptionsTreeView.Nodes[dcIndex].Expand();
-            //ActGlobals.oFormActMain.SetOptionsHelpText("testing");
 
             // Neverwinter settings file
             xmlSettings = new SettingsSerializer(this);
@@ -266,7 +356,7 @@ namespace Parsing_Plugin
 
             // This Regex is only used by a quick parsing method to find the current zone name based on a file position
             // If you do not define this correctly, the quick parser will fail and take a while to do so.
-            // You still need to implement a zone change parser in your engine regardless of this
+            // You still need to implement a zone Fchange parser in your engine regardless of this
             // ActGlobals.oFormActMain.ZoneChangeRegex = new Regex(@"You have entered: (.+)\.", RegexOptions.Compiled);
 
             // All of your parsing engine will be based off of this event
@@ -278,9 +368,6 @@ namespace Parsing_Plugin
             ActGlobals.oFormActMain.LogFileChanged += new LogFileChangedDelegate(oFormActMain_LogFileChanged);
 
             // InitializeOwnerIsTheRealSource();
-
-            //playerCharacterNames.Add("Lodur", true);
-            //playerCharacterNames.Add("Fiolnir", true);
 
             FixupCombatDataStructures();
 
@@ -810,7 +897,6 @@ namespace Parsing_Plugin
             petOwnerRegistery.Clear();
             entityOwnerRegistery.Clear();
             magicMissileLastHit.Clear();
-            playersCharacterFound = false;
         }
 
         void oFormActMain_OnCombatEnd(bool isImport, CombatToggleEventArgs encounterInfo)
@@ -822,8 +908,15 @@ namespace Parsing_Plugin
 
             magicMissileLastHit.Clear();
             entityOwnerRegistery.Clear();
-            playersCharacterFound = false;
         }
+
+        /*
+        private void purgePetCache()
+        {
+            petPlayerCache.Clear();
+            playerPetCache.Clear();
+        }
+        */
 
         // Must match LogLineEventDelegate signature
         void oFormActMain_BeforeLogLineRead(bool isImport, LogLineEventArgs logInfo)
@@ -854,19 +947,6 @@ namespace Parsing_Plugin
 
             // Fix up the ParsedLine to be easy to process.
             processBasic(pl);
-
-            // Detect Player names..
-            if ( ! (playersCharacterFound || isImport ) )
-            {
-                if (pl.ownEntityType == EntityType.Player)
-                {
-                    if (playerCharacterNames.ContainsKey(pl.ownDsp))
-                    {
-                        ActGlobals.charName = pl.ownDsp;
-                        playersCharacterFound = true;
-                    }
-                }
-            }
 
             // Do the real stuff..
             processAction(pl);
@@ -1829,6 +1909,70 @@ namespace Parsing_Plugin
             xWriter.Close();
         }
 
+        private void button_add_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button_remove_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button_clearAll_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void listBox_players_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void textBox_player_TextChanged(object sender, EventArgs e)
+        {
+            this.button_add.Enabled = (this.textBox_player.Text.Length > 0);
+        }
+
+        private void groupBox1_MouseEnter(object sender, EventArgs e)
+        {
+            ActGlobals.oFormActMain.SetOptionsHelpText("Add the names of your player characters.  This allows ACT to detect which player character is yours.");
+        }
+
+        private void checkBox_mergeNPC_MouseEnter(object sender, EventArgs e)
+        {
+            ActGlobals.oFormActMain.SetOptionsHelpText("");
+        }
+
+        private void checkBox_mergePets_MouseEnter(object sender, EventArgs e)
+        {
+            ActGlobals.oFormActMain.SetOptionsHelpText("");
+        }
+
+        private void checkBox_flankSkill_MouseEnter(object sender, EventArgs e)
+        {
+            ActGlobals.oFormActMain.SetOptionsHelpText("");
+        }
+
+        private void groupBox1_MouseLeave(object sender, EventArgs e)
+        {
+            ActGlobals.oFormActMain.SetOptionsHelpText(String.Empty);
+        }
+
+        private void checkBox_mergeNPC_MouseLeave(object sender, EventArgs e)
+        {
+            ActGlobals.oFormActMain.SetOptionsHelpText(String.Empty);
+        }
+
+        private void checkBox_mergePets_MouseLeave(object sender, EventArgs e)
+        {
+            ActGlobals.oFormActMain.SetOptionsHelpText(String.Empty);
+        }
+
+        private void checkBox_flankSkill_MouseLeave(object sender, EventArgs e)
+        {
+            ActGlobals.oFormActMain.SetOptionsHelpText(String.Empty);
+        }
     }
 
     internal class OwnerInfo
