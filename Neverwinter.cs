@@ -16,10 +16,12 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.8.0")]
+[assembly: AssemblyVersion("0.0.9.0")]
 
 
 /* Version History - npb
+ * 0.0.9.0 - 2013/8/08
+ *  - Added options to add player character names to help detect the player and allies.
  * 0.0.8.0 - 2013/7/20
  *  - Reworked the processing model.  Less special cases.  Better support.
  * 0.0.7.0 - 2013/7/16
@@ -912,6 +914,8 @@ namespace Parsing_Plugin
             petOwnerRegistery.Clear();
             entityOwnerRegistery.Clear();
             magicMissileLastHit.Clear();
+
+            playersCharacterFound = false;
         }
 
         void oFormActMain_OnCombatEnd(bool isImport, CombatToggleEventArgs encounterInfo)
@@ -923,6 +927,7 @@ namespace Parsing_Plugin
 
             magicMissileLastHit.Clear();
             entityOwnerRegistery.Clear();
+            playersCharacterFound = false;
         }
 
         // Must match LogLineEventDelegate signature
