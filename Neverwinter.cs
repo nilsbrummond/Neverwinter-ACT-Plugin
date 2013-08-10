@@ -16,10 +16,13 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.9.0")]
+[assembly: AssemblyVersion("0.0.9.1")]
 
 
 /* Version History - npb
+ * 0.0.9.1 - 2013/8/10
+ *  - Change the fixed point damage so the graphs will not be off by 10x.  Round-offs errors are increased.
+ *  - Keep exact damage number as well for direct display.
  * 0.0.9.0 - 2013/8/08
  *  - Added options to add player character names to help detect the player and allies.
  * 0.0.8.0 - 2013/7/20
@@ -811,11 +814,7 @@ namespace Parsing_Plugin
         private void FixupCombatDataStructures()
         {
             // - Remove data types that do not apply to Neverwinter combat logs.
-            // - Display fixed point int for damage since ACT using integer damage and Neverwinter uses floating.
-            // - TODO: Finish export vars cleanups.
-
-            //EncounterData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
-            //EncounterData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.DPS / 10).ToString(GetFloatCommas()); };
+            // - Add new data types just for Neverwinter.
 
             EncounterData.ExportVariables.Remove("maxhealward");
             EncounterData.ExportVariables.Remove("MAXHEALWARD");
@@ -824,14 +823,6 @@ namespace Parsing_Plugin
             CombatantData.ColumnDefs.Remove("PowerDrain");
             CombatantData.ColumnDefs.Remove("Threat +/-");
             CombatantData.ColumnDefs.Remove("ThreatDelta");
-
-            //CombatantData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
-            //CombatantData.ColumnDefs["Healed"].GetCellData = (Data) => { return (Data.Healed / 10).ToString(GetIntCommas()); };
-            //CombatantData.ColumnDefs["DPS"].GetCellData = (Data) => { return (Data.DPS / 10).ToString(GetFloatCommas()); };
-            //CombatantData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.EncDPS / 10).ToString(GetFloatCommas()); };
-            //CombatantData.ColumnDefs["EncHPS"].GetCellData = (Data) => { return (Data.EncHPS / 10).ToString(GetFloatCommas()); };
-            //CombatantData.ColumnDefs["HealingTaken"].GetCellData = (Data) => { return (Data.HealsTaken / 10).ToString(GetIntCommas()); };
-            //CombatantData.ColumnDefs["DamageTaken"].GetCellData = (Data) => { return (Data.DamageTaken / 10).ToString(GetIntCommas()); };
 
             CombatantData.ColumnDefs.Add("FlankDam%",
                 new CombatantData.ColumnDef("FlankDam%", false, "VARCHAR(8)", "FlankDamPrec", GetCellDataFlankDamPrec, GetSqlDataFlankDamPrec, CDCompareFlankDamPrec));
@@ -862,14 +853,6 @@ namespace Parsing_Plugin
             CombatantData.ExportVariables.Remove("maxhealward");
             CombatantData.ExportVariables.Remove("MAXHEALWARD");
 
-            //DamageTypeData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
-            //DamageTypeData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.EncDPS / 10.0).ToString(GetFloatCommas()); };
-            //DamageTypeData.ColumnDefs["CharDPS"].GetCellData = (Data) => { return (Data.CharDPS / 10.0).ToString(GetFloatCommas()); };
-            //DamageTypeData.ColumnDefs["DPS"].GetCellData = (Data) => { return (Data.DPS / 10.0).ToString(GetFloatCommas()); };
-            //DamageTypeData.ColumnDefs["Average"].GetCellData = (Data) => { return (Data.Average / 10.0).ToString(GetFloatCommas()); };
-            //DamageTypeData.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
-            //DamageTypeData.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
-            //DamageTypeData.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
             DamageTypeData.ColumnDefs.Add("FlankHits", 
                 new DamageTypeData.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits));
             DamageTypeData.ColumnDefs.Add("Flank%",
@@ -877,14 +860,6 @@ namespace Parsing_Plugin
             DamageTypeData.ColumnDefs.Add("Effectiveness",
                 new DamageTypeData.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness));
 
-            //AttackType.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
-            AttackType.ColumnDefs["EncDPS"].GetCellData = (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); };
-            AttackType.ColumnDefs["CharDPS"].GetCellData = (Data) => { return Data.CharDPS.ToString(GetFloatCommas()); };
-            AttackType.ColumnDefs["DPS"].GetCellData = (Data) => { return Data.DPS.ToString(GetFloatCommas()); };
-            //AttackType.ColumnDefs["Average"].GetCellData = (Data) => { return (Data.Average / 10).ToString(GetIntCommas()); };
-            //AttackType.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
-            //AttackType.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
-            //AttackType.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs.Add("FlankHits",
                 new AttackType.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits, AttackTypeCompareFlankHits));
             AttackType.ColumnDefs.Add("Flank%",
@@ -1570,11 +1545,6 @@ namespace Parsing_Plugin
                     // Target is the source as well.
                     if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.tgtDsp, l.tgtDsp))
                     {
-//                        ActGlobals.oFormActMain.AddCombatAction(
-//                            (int)SwingTypeEnum.PowerHealing, l.critical, "", "Trickster [" + l.tgtDsp + "]",
-//                            "Bait and Switch", new Dnum(-magAdj), l.logInfo.detectedTime,
-//                            l.ts, l.tgtDsp, l.type);
-
                         AddCombatAction(
                             (int)SwingTypeEnum.PowerHealing, l.critical, false, "", "Trickster [" + l.tgtDsp + "]",
                             "Bait and Switch", new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
@@ -1766,7 +1736,7 @@ namespace Parsing_Plugin
                 else if (l.dodge)
                 {
                     // It really looks like Dodge does not stop all damage - just reduces it by about 80%...
-                    // I have seen damaging attacks that are both Dodge and Kill in the flags.  
+                    // I have seen damaging attacks that are both Dodge and Kill in the flags.
                     // So the target dodged but still died.
                     l.logInfo.detectedType = Color.Maroon.ToArgb();
                     addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
@@ -1838,15 +1808,10 @@ namespace Parsing_Plugin
                 // Use encounter names attacker and target here.  This allows filtering
                 if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
                 {
-//                    ActGlobals.oFormActMain.AddCombatAction(
-//                        l.swingType, l.critical, l.special, l.unitAttackerName,
-//                        "Killing", Dnum.Death, l.logInfo.detectedTime,
-//                        l.ts, l.unitTargetName, "Death");
-
-                    MasterSwing ms = new MasterSwing(l.swingType, l.critical, l.special, Dnum.Death, l.logInfo.detectedTime, l.ts, "Killing", l.unitAttackerName, "Death", l.unitTargetName);
-
+                    MasterSwing ms = 
+                        new MasterSwing(l.swingType, l.critical, l.special, Dnum.Death, l.logInfo.detectedTime, l.ts, 
+                            "Killing", l.unitAttackerName, "Death", l.unitTargetName);
                     ms.Tags.Add("Flank", l.flank);
-
                     ActGlobals.oFormActMain.AddCombatAction(ms);
                 }
             }
@@ -2035,7 +2000,7 @@ namespace Parsing_Plugin
 
         private void playerNameControls_MouseEnter(object sender, EventArgs e)
         {
-            ActGlobals.oFormActMain.SetOptionsHelpText("Add the names of your player characters.  This allows ACT to detect which player character is yours.");
+            ActGlobals.oFormActMain.SetOptionsHelpText("Add the names of your player characters.  This allows ACT to detect which player character is yours.  Spelling and capitalization must be exact.");
         }
 
         private void checkBox_mergeNPC_MouseEnter(object sender, EventArgs e)
