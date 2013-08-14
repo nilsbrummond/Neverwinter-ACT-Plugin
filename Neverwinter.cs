@@ -16,10 +16,13 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.9.0")]
+[assembly: AssemblyVersion("0.0.9.1")]
 
 
 /* Version History - npb
+ * 0.0.9.1 - 2013/8/10
+ *  - Change the fixed point damage so the graphs will not be off by 10x.  Round-offs errors are increased.
+ *  - Keep exact damage number as well for direct display.
  * 0.0.9.0 - 2013/8/08
  *  - Added options to add player character names to help detect the player and allies.
  * 0.0.8.0 - 2013/7/20
@@ -450,16 +453,13 @@ namespace Parsing_Plugin
 
         private string GetCellDataBaseDamage(MasterSwing Data)
         {
-            object duration;
+            object damBaseObj;
 
-            if (Data.Tags.TryGetValue("BaseDamage", out duration))
+            if (Data.Tags.TryGetValue("BaseDamage", out damBaseObj))
             {
-                int d = (int)duration;
+                float d = (float)damBaseObj;
                 if (d == 0) return "";
-
-                double dd = (double)d;
-                dd /= 10;
-                return dd.ToString("F1");
+                return d.ToString("F1");
             }
 
             return "";
@@ -467,11 +467,11 @@ namespace Parsing_Plugin
 
         private string GetSqlDataBaseDamage(MasterSwing Data)
         {
-            object duration;
+            object damBaseObj;
 
-            if (Data.Tags.TryGetValue("BaseDamage", out duration))
+            if (Data.Tags.TryGetValue("BaseDamage", out damBaseObj))
             {
-                int d = (int)duration;
+                float d = (float)damBaseObj;
                 return d.ToString();
             }
 
@@ -488,8 +488,8 @@ namespace Parsing_Plugin
 
             if (lvalid && rvalid)
             {
-                int dl = (int)l;
-                int dr = (int)r;
+                float dl = (float)l;
+                float dr = (float)r;
 
                 return dl.CompareTo(dr);
             }
@@ -503,11 +503,11 @@ namespace Parsing_Plugin
 
         private string GetCellDataEffectiveness(MasterSwing Data)
         {
-            object duration;
+            object effObj;
 
-            if (Data.Tags.TryGetValue("Effectiveness", out duration))
+            if (Data.Tags.TryGetValue("Effectiveness", out effObj))
             {
-                double d = (double)duration;
+                float d = (float)effObj;
                 return d.ToString("P1");
             }
 
@@ -516,11 +516,11 @@ namespace Parsing_Plugin
 
         private string GetSqlDataEffectiveness(MasterSwing Data)
         {
-            object duration;
+            object effObj;
 
-            if (Data.Tags.TryGetValue("Effectiveness", out duration))
+            if (Data.Tags.TryGetValue("Effectiveness", out effObj))
             {
-                double d = (double)duration;
+                double d = (float)effObj;
                 return d.ToString();
             }
 
@@ -537,8 +537,8 @@ namespace Parsing_Plugin
 
             if (lvalid && rvalid)
             {
-                double dl = (double)l;
-                double dr = (double)r;
+                float dl = (float)l;
+                float dr = (float)r;
 
                 return dl.CompareTo(dr);
             }
@@ -549,14 +549,15 @@ namespace Parsing_Plugin
                 else { return 0; }
             }
         }
+
         private string GetCellDataDamage(MasterSwing Data)
         {
             if (Data.Damage > 0)
             {
-                int d = (int)Data.Damage;
-                double dd = (double)d;
-                dd /= 10;
-                return dd.ToString("F1");
+                object d;
+                Data.Tags.TryGetValue("DamageF", out d);
+                float df = (float) d;
+                return df.ToString("F1");
             }
 
             return Data.Damage.ToString();
@@ -672,8 +673,6 @@ namespace Parsing_Plugin
 
         private string GetCellDataFlankPrec(AttackType Data)
         {
-            // return GetAAFlankValue(Data).ToString() + " / " + Data.Hits.ToString();
-
             double flankPrec = (double) GetAAFlankValue(Data);
             flankPrec *= 100.0;
             flankPrec /= (double)Data.Hits;
@@ -703,8 +702,8 @@ namespace Parsing_Plugin
 
         private double GetAAEffectiveness(AttackType Data)
         {
-            int dmgTotal = 0;
-            int baseDmgTotal = 0;
+            double dmgTotal = 0;
+            double baseDmgTotal = 0;
             double effectiveness = 0.0;
 
             if (Data.Items.Count == 0) return Double.NaN;
@@ -726,14 +725,19 @@ namespace Parsing_Plugin
             {
                 MasterSwing ms = Data.Items[i];
 
-                object fv;
-                if (ms.Tags.TryGetValue("BaseDamage", out fv))
+                object damBaseObj;
+                object damObj;
+
+                if (ms.Tags.TryGetValue("BaseDamage", out damBaseObj))
                 {
-                    int bd = (int) fv;
+                    ms.Tags.TryGetValue("DamageF", out damObj);
+
+                    float bd = (float)damBaseObj;
+                    float d = (float)damObj;
 
                     if (bd > 0)
                     {
-                        dmgTotal += ms.Damage.Number;
+                        dmgTotal += d;
                         baseDmgTotal += bd;
                     }
                 }
@@ -810,11 +814,7 @@ namespace Parsing_Plugin
         private void FixupCombatDataStructures()
         {
             // - Remove data types that do not apply to Neverwinter combat logs.
-            // - Display fixed point int for damage since ACT using integer damage and Neverwinter uses floating.
-            // - TODO: Finish export vars cleanups.
-
-            EncounterData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
-            EncounterData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.DPS / 10).ToString(GetFloatCommas()); };
+            // - Add new data types just for Neverwinter.
 
             EncounterData.ExportVariables.Remove("maxhealward");
             EncounterData.ExportVariables.Remove("MAXHEALWARD");
@@ -823,14 +823,6 @@ namespace Parsing_Plugin
             CombatantData.ColumnDefs.Remove("PowerDrain");
             CombatantData.ColumnDefs.Remove("Threat +/-");
             CombatantData.ColumnDefs.Remove("ThreatDelta");
-
-            CombatantData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
-            CombatantData.ColumnDefs["Healed"].GetCellData = (Data) => { return (Data.Healed / 10).ToString(GetIntCommas()); };
-            CombatantData.ColumnDefs["DPS"].GetCellData = (Data) => { return (Data.DPS / 10).ToString(GetFloatCommas()); };
-            CombatantData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.EncDPS / 10).ToString(GetFloatCommas()); };
-            CombatantData.ColumnDefs["EncHPS"].GetCellData = (Data) => { return (Data.EncHPS / 10).ToString(GetFloatCommas()); };
-            CombatantData.ColumnDefs["HealingTaken"].GetCellData = (Data) => { return (Data.HealsTaken / 10).ToString(GetIntCommas()); };
-            CombatantData.ColumnDefs["DamageTaken"].GetCellData = (Data) => { return (Data.DamageTaken / 10).ToString(GetIntCommas()); };
 
             CombatantData.ColumnDefs.Add("FlankDam%",
                 new CombatantData.ColumnDef("FlankDam%", false, "VARCHAR(8)", "FlankDamPrec", GetCellDataFlankDamPrec, GetSqlDataFlankDamPrec, CDCompareFlankDamPrec));
@@ -861,14 +853,6 @@ namespace Parsing_Plugin
             CombatantData.ExportVariables.Remove("maxhealward");
             CombatantData.ExportVariables.Remove("MAXHEALWARD");
 
-            DamageTypeData.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
-            DamageTypeData.ColumnDefs["EncDPS"].GetCellData = (Data) => { return (Data.EncDPS / 10.0).ToString(GetFloatCommas()); };
-            DamageTypeData.ColumnDefs["CharDPS"].GetCellData = (Data) => { return (Data.CharDPS / 10.0).ToString(GetFloatCommas()); };
-            DamageTypeData.ColumnDefs["DPS"].GetCellData = (Data) => { return (Data.DPS / 10.0).ToString(GetFloatCommas()); };
-            DamageTypeData.ColumnDefs["Average"].GetCellData = (Data) => { return (Data.Average / 10.0).ToString(GetFloatCommas()); };
-            DamageTypeData.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
-            DamageTypeData.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
-            DamageTypeData.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
             DamageTypeData.ColumnDefs.Add("FlankHits", 
                 new DamageTypeData.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits));
             DamageTypeData.ColumnDefs.Add("Flank%",
@@ -876,14 +860,6 @@ namespace Parsing_Plugin
             DamageTypeData.ColumnDefs.Add("Effectiveness",
                 new DamageTypeData.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness));
 
-            AttackType.ColumnDefs["Damage"].GetCellData = (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); };
-            AttackType.ColumnDefs["EncDPS"].GetCellData = (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); };
-            AttackType.ColumnDefs["CharDPS"].GetCellData = (Data) => { return Data.CharDPS.ToString(GetFloatCommas()); };
-            AttackType.ColumnDefs["DPS"].GetCellData = (Data) => { return Data.DPS.ToString(GetFloatCommas()); };
-            AttackType.ColumnDefs["Average"].GetCellData = (Data) => { return (Data.Average / 10).ToString(GetIntCommas()); };
-            AttackType.ColumnDefs["Median"].GetCellData = (Data) => { return (Data.Median / 10).ToString(GetIntCommas()); };
-            AttackType.ColumnDefs["MinHit"].GetCellData = (Data) => { return (Data.MinHit / 10).ToString(GetIntCommas()); };
-            AttackType.ColumnDefs["MaxHit"].GetCellData = (Data) => { return (Data.MaxHit / 10).ToString(GetIntCommas()); };
             AttackType.ColumnDefs.Add("FlankHits",
                 new AttackType.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits, AttackTypeCompareFlankHits));
             AttackType.ColumnDefs.Add("Flank%",
@@ -1335,8 +1311,8 @@ namespace Parsing_Plugin
 
         private void processActionHeals(ParsedLine l)
         {
-            int magAdj = (int)Math.Round(l.mag * 10);
-            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+            int magAdj = (int)Math.Round(l.mag);
+            int magBaseAdj = (int)Math.Round(l.magBase);
 
             l.logInfo.detectedType = l.critical ? Color.Green.ToArgb() : Color.DarkGreen.ToArgb();
 
@@ -1354,9 +1330,9 @@ namespace Parsing_Plugin
                     // Use encounter names attacker and target here.  This allows filtering
                     if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
                     {
-                        ActGlobals.oFormActMain.AddCombatAction(
-                            (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
-                            "PVP Heal Rune", new Dnum(-magAdj), l.logInfo.detectedTime,
+                        AddCombatAction(
+                            (int)SwingTypeEnum.Healing, l.critical, false, l.special, l.unitTargetName,
+                            "PVP Heal Rune", new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                             l.ts, l.unitTargetName, l.type);
                     }
                 }
@@ -1383,9 +1359,9 @@ namespace Parsing_Plugin
                     // Use encounter names attacker and target here.  This allows filtering
                     if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
                     {
-                        ActGlobals.oFormActMain.AddCombatAction(
-                            (int)SwingTypeEnum.Healing, l.critical, l.special, l.unitTargetName,
-                            l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+                        AddCombatAction(
+                            (int)SwingTypeEnum.Healing, l.critical, false, l.special, l.unitTargetName,
+                            l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                             l.ts, l.unitTargetName, l.type);
                     }
                 }
@@ -1413,9 +1389,9 @@ namespace Parsing_Plugin
                         // Use encounter names attacker and target here.  This allows filtering
                         if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, cgi.encName, l.encTargetName))
                         {
-                            ActGlobals.oFormActMain.AddCombatAction(
-                                (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, cgi.unitName,
-                                l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+                            AddCombatAction(
+                                (int)SwingTypeEnum.Healing, l.critical, l.flank, l.unitAttackerName, cgi.unitName,
+                                l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
 
@@ -1427,9 +1403,9 @@ namespace Parsing_Plugin
                         // Use encounter names attacker and target here.  This allows filtering
                         if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
                         {
-                            ActGlobals.oFormActMain.AddCombatAction(
-                                (int)SwingTypeEnum.Healing, l.critical, l.unitAttackerName, unk,
-                                l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+                            AddCombatAction(
+                                (int)SwingTypeEnum.Healing, l.critical, l.flank, l.unitAttackerName, unk,
+                                l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
                     }
@@ -1446,15 +1422,15 @@ namespace Parsing_Plugin
                 else
                 {
                     // Default heal.
-                    addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
+                    addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum(-magAdj), -l.mag, l.type);
                 }
             }
         }
 
         private void processActionShields(ParsedLine l)
         {
-            int magAdj = (int)Math.Round(l.mag * 10);
-            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+            int magAdj = (int)Math.Round(l.mag);
+            int magBaseAdj = (int)Math.Round(l.magBase);
 
             // Shielding goes first and acts like a heal to cancel coming damage.  Attacker has his own damage line.  example:
 
@@ -1485,16 +1461,38 @@ namespace Parsing_Plugin
             // Use encounter names attacker and target here.  This allows filtering
             if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
             {
-                // This is just weird...
-                Dnum shielded = new Dnum((magBaseAdj == 0) ? -magAdj : -magBaseAdj);
-
                 // Put the attacker and the attack type in the special field.
                 string special = l.unitAttackerName + " : " + l.attackType;
 
-                ActGlobals.oFormActMain.AddCombatAction(
-                    (int)SwingTypeEnum.Healing, false, special, l.unitTargetName,
-                    l.type, shielded, l.logInfo.detectedTime,
-                    l.ts, l.unitTargetName, l.type);
+                Dnum shielded = null;
+                float mag = 0;
+                float magBase = 0;
+
+                // This is just weird...
+                if (magBaseAdj == 0)
+                {
+                    shielded = new Dnum( -magAdj );
+                    mag = -l.mag;
+                    magBase = -l.magBase;
+                }
+                else
+                {
+                    shielded = new Dnum(-magBaseAdj);
+                    mag = -l.magBase;
+                    magBase = -l.mag;
+                }
+
+                MasterSwing ms = new MasterSwing(l.swingType, l.critical, l.special, shielded, l.logInfo.detectedTime, l.ts, l.type, l.unitAttackerName, l.type, l.unitTargetName);
+
+                ms.Tags.Add("DamageF", mag);
+                ms.Tags.Add("Flank", l.flank);
+
+                ActGlobals.oFormActMain.AddCombatAction(ms);
+
+//                AddCombatAction(
+//                    (int)SwingTypeEnum.Healing, l.critical, l.flank, special, l.unitTargetName,
+//                    l.type, shielded, mag, magBase, l.logInfo.detectedTime,
+//                    l.ts, l.unitTargetName, l.type);
             }
         }
 
@@ -1508,13 +1506,13 @@ namespace Parsing_Plugin
             if (ActGlobals.oFormActMain.InCombat)
             {
                 processNamesOST(l);
-                addCombatAction(l, (int)SwingTypeEnum.CureDispel, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
+                addCombatAction(l, (int)SwingTypeEnum.CureDispel, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
             }
         }
 
         private void processActionPower(ParsedLine l)
         {
-            int magAdj = (int)Math.Round(l.mag * 10);
+            int magAdj = (int)Math.Round(l.mag);
             //int magBaseAdj = (int)Math.Round(l.magBase * 10);
 
             l.logInfo.detectedType = Color.Black.ToArgb();
@@ -1547,9 +1545,9 @@ namespace Parsing_Plugin
                     // Target is the source as well.
                     if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.tgtDsp, l.tgtDsp))
                     {
-                        ActGlobals.oFormActMain.AddCombatAction(
-                            (int)SwingTypeEnum.PowerHealing, l.critical, "", "Trickster [" + l.tgtDsp + "]",
-                            "Bait and Switch", new Dnum(-magAdj), l.logInfo.detectedTime,
+                        AddCombatAction(
+                            (int)SwingTypeEnum.PowerHealing, l.critical, false, "", "Trickster [" + l.tgtDsp + "]",
+                            "Bait and Switch", new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
                             l.ts, l.tgtDsp, l.type);
                     }
                 }
@@ -1567,9 +1565,14 @@ namespace Parsing_Plugin
 
                     if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.unitTargetName, l.unitTargetName))
                     {
-                        ActGlobals.oFormActMain.AddCombatAction(
-                            (int)SwingTypeEnum.PowerHealing, l.critical, l.unitAttackerName, l.unitTargetName,
-                            l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+//                        ActGlobals.oFormActMain.AddCombatAction(
+//                            (int)SwingTypeEnum.PowerHealing, l.critical, l.unitAttackerName, l.unitTargetName,
+//                            l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
+//                            l.ts, l.unitTargetName, l.type); 
+
+                        AddCombatAction(
+                            (int)SwingTypeEnum.PowerHealing, l.critical, false, l.unitAttackerName, l.unitTargetName,
+                            l.evtDsp, new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
                             l.ts, l.unitTargetName, l.type);
                     }
                 }
@@ -1585,7 +1588,7 @@ namespace Parsing_Plugin
                 {
                     // Normal Power case...
                     processNamesOST(l);
-                    addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum(-magAdj), l.type);
+                    addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum(-magAdj), -l.mag, l.type);
                 }
             }
         }
@@ -1617,7 +1620,7 @@ namespace Parsing_Plugin
 
                 if (ActGlobals.oFormActMain.InCombat)
                 {
-                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
+                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
                 }
             }
             else if (l.evtInt == "Pn.Zh5vu")
@@ -1634,15 +1637,15 @@ namespace Parsing_Plugin
                 if (ActGlobals.oFormActMain.InCombat)
                 {
                     processNamesOST(l);
-                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type);
+                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
                 }
             }
         }
 
         private void processActionDamage(ParsedLine l)
         {
-            int magAdj = (int)Math.Round(l.mag * 10);
-            int magBaseAdj = (int)Math.Round(l.magBase * 10);
+            int magAdj = (int)Math.Round(l.mag);
+            int magBaseAdj = (int)Math.Round(l.magBase);
 
             l.logInfo.detectedType = l.critical ? Color.Red.ToArgb() : Color.DarkRed.ToArgb();
 
@@ -1653,7 +1656,7 @@ namespace Parsing_Plugin
                 if (ActGlobals.oFormActMain.InCombat)
                 {
                     processNamesOST(l);
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                 }
             }
             else if (l.evtInt == "Pn.Wypyjw1") // Knight's Valor,
@@ -1662,7 +1665,7 @@ namespace Parsing_Plugin
                 // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
 
                 processNamesST(l);
-                addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
             }
             else
             {
@@ -1727,16 +1730,16 @@ namespace Parsing_Plugin
                     {
                         // Generally damaging attacks have mag=0 and magBase > 0 when Immune.
                         l.logInfo.detectedType = Color.Maroon.ToArgb();
-                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.NoDamage, l.type, magBaseAdj);
+                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.NoDamage, l.mag, l.type, l.magBase);
                     }
                 }
                 else if (l.dodge)
                 {
                     // It really looks like Dodge does not stop all damage - just reduces it by about 80%...
-                    // I have seen damaging attacks that are both Dodge and Kill in the flags.  
+                    // I have seen damaging attacks that are both Dodge and Kill in the flags.
                     // So the target dodged but still died.
                     l.logInfo.detectedType = Color.Maroon.ToArgb();
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                 }
                 else
                 {
@@ -1748,7 +1751,7 @@ namespace Parsing_Plugin
                     else
                     {
                         // All attacks have a magBase.
-                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.type, magBaseAdj);
+                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                     }
                 }
             }
@@ -1805,16 +1808,17 @@ namespace Parsing_Plugin
                 // Use encounter names attacker and target here.  This allows filtering
                 if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
                 {
-                    ActGlobals.oFormActMain.AddCombatAction(
-                        l.swingType, l.critical, l.special, l.unitAttackerName,
-                        "Killing", Dnum.Death, l.logInfo.detectedTime,
-                        l.ts, l.unitTargetName, "Death");
+                    MasterSwing ms = 
+                        new MasterSwing(l.swingType, l.critical, l.special, Dnum.Death, l.logInfo.detectedTime, l.ts, 
+                            "Killing", l.unitAttackerName, "Death", l.unitTargetName);
+                    ms.Tags.Add("Flank", l.flank);
+                    ActGlobals.oFormActMain.AddCombatAction(ms);
                 }
             }
         }
 
         private void addCombatAction(
-            ParsedLine line, int swingType, bool critical, string special, string theAttackType, Dnum Damage, string theDamageType, int baseDamage=0)
+            ParsedLine line, int swingType, bool critical, string special, string theAttackType, Dnum Damage, float realDamage, string theDamageType, float baseDamage=0)
         {
             // Use encounter names attacker and target here.  This allows filtering
             if (ActGlobals.oFormActMain.SetEncounter(line.logInfo.detectedTime, line.encAttackerName, line.encTargetName))
@@ -1825,24 +1829,25 @@ namespace Parsing_Plugin
 
                 AddCombatAction(
                     swingType, line.critical, line.flank, special, line.unitAttackerName,
-                    tempAttack, Damage, baseDamage, line.logInfo.detectedTime,
+                    tempAttack, Damage, realDamage, baseDamage, line.logInfo.detectedTime,
                     line.ts, line.unitTargetName, theDamageType);
             }
         }
 
         private void AddCombatAction(
             int swingType, bool critical, bool flank, string special, string attacker, string theAttackType, 
-            Dnum damage, int baseDamage,
+            Dnum damage, float realDamage, float baseDamage,
             DateTime time, int timeSorter, string victim, string theDamageType)
         {
             MasterSwing ms = new MasterSwing(swingType, critical, special, damage, time, timeSorter, theAttackType, attacker, theDamageType, victim);
 
+            ms.Tags.Add("DamageF", realDamage);
             ms.Tags.Add("BaseDamage", baseDamage);
             ms.Tags.Add("Flank", flank);
 
             if (baseDamage > 0)
             {
-                double eff = (double)damage / (double)baseDamage;
+                float eff = realDamage / baseDamage;
                 ms.Tags.Add("Effectiveness", eff);
             }
 
@@ -1995,7 +2000,7 @@ namespace Parsing_Plugin
 
         private void playerNameControls_MouseEnter(object sender, EventArgs e)
         {
-            ActGlobals.oFormActMain.SetOptionsHelpText("Add the names of your player characters.  This allows ACT to detect which player character is yours.");
+            ActGlobals.oFormActMain.SetOptionsHelpText("Add the names of your player characters.  This allows ACT to detect which player character is yours.  Spelling and capitalization must be exact.");
         }
 
         private void checkBox_mergeNPC_MouseEnter(object sender, EventArgs e)
