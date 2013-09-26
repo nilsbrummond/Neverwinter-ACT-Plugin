@@ -12,9 +12,8 @@ which is based on the STO plugin from Hilbert @ mancom, Pirye @ ucalegon.
 
 State
 =====
-- Needs testing and verification.
 - Tracking of CW Chaotic Growth gives the healing credit to the last CW to MM the target.
-- I'm sure there are losts of different special cases left to handle.
+- Most special cases should be covered now.
 - Combat log colored.
 - Companion Pet's owners tracked.
 - Damage base recording and effectiveness (dmg / dmgBase)
@@ -26,7 +25,6 @@ Known Issues
 ============
 - Devoted Cleric power "Flame Strike" causes falling damage that can not be tracked.  Falling damage does not specify who/what caused the fall.
 - There is currently no way to detect zone changes from the Combatlog.Log file.
-- All graphs show 10x the actual value.
 
 
 Install
