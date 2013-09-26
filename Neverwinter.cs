@@ -1482,17 +1482,17 @@ namespace Parsing_Plugin
                     magBase = -l.mag;
                 }
 
-                MasterSwing ms = new MasterSwing(l.swingType, l.critical, l.special, shielded, l.logInfo.detectedTime, l.ts, l.type, l.unitAttackerName, l.type, l.unitTargetName);
+                // SwingType = Heal
+                // special = attacker
+                // attacker & victim = target
+                MasterSwing ms = new MasterSwing(
+                    (int)SwingTypeEnum.Healing,
+                    l.critical, special, shielded, l.logInfo.detectedTime, l.ts, l.type, l.unitTargetName, l.type, l.unitTargetName);
 
                 ms.Tags.Add("DamageF", mag);
                 ms.Tags.Add("Flank", l.flank);
 
                 ActGlobals.oFormActMain.AddCombatAction(ms);
-
-//                AddCombatAction(
-//                    (int)SwingTypeEnum.Healing, l.critical, l.flank, special, l.unitTargetName,
-//                    l.type, shielded, mag, magBase, l.logInfo.detectedTime,
-//                    l.ts, l.unitTargetName, l.type);
             }
         }
 
