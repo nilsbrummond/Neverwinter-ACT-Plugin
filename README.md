@@ -12,6 +12,7 @@ which is based on the STO plugin from Hilbert @ mancom, Pirye @ ucalegon.
 
 State
 =====
+- Stable enough for a 1.0 release.  Please report any issues you have.
 - Tracking of CW Chaotic Growth gives the healing credit to the last CW to MM the target.
 - Most special cases should be covered now.
 - Combat log colored.
