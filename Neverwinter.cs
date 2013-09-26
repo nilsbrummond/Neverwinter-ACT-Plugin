@@ -16,10 +16,14 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("0.0.9.1")]
+[assembly: AssemblyVersion("1.0.0.0")]
 
 
 /* Version History - npb
+ * 1.0.0.0 - 2013/9/26
+ *  - Fixes to shield tracking.
+ *  - Fixes to Chaotic Growth tracking.
+ *  - Looks good for a 1.0 release at this point.
  * 0.0.9.1 - 2013/8/10
  *  - Change the fixed point damage so the graphs will not be off by 10x.  Round-offs errors are increased.
  *  - Keep exact damage number as well for direct display.
@@ -901,7 +905,9 @@ namespace Parsing_Plugin
             // Don't actually want this.  Maybe on zone changes.
             // purgePetCache();
 
-            magicMissileLastHit.Clear();
+            // Don't clear this.  PvP encounters can be split while Chaotic Growth is active.
+            // magicMissileLastHit.Clear();
+
             entityOwnerRegistery.Clear();
             playersCharacterFound = false;
         }
