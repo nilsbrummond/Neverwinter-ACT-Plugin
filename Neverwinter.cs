@@ -59,7 +59,7 @@ using System.Net;
 */
 
 
-namespace Parsing_Plugin
+namespace NWParsing_Plugin
 {
     public class NW_Parser : UserControl, IActPluginV1
     {
@@ -290,6 +290,8 @@ namespace Parsing_Plugin
 
         private PetOwnerRegistery petOwnerRegistery = new PetOwnerRegistery();
         private EntityOwnerRegistery entityOwnerRegistery = new EntityOwnerRegistery();
+
+        private UnmatchedShieldLines unmatchedShieldLines = new UnmatchedShieldLines();
 
         // For tracking source of Chaotic Growth heals.
         private Dictionary<string, ChaoticGrowthInfo> magicMissileLastHit = new Dictionary<string, ChaoticGrowthInfo>();
@@ -894,6 +896,7 @@ namespace Parsing_Plugin
             petOwnerRegistery.Clear();
             entityOwnerRegistery.Clear();
             magicMissileLastHit.Clear();
+            unmatchedShieldLines.Clear();
 
             playersCharacterFound = false;
         }
@@ -907,6 +910,8 @@ namespace Parsing_Plugin
 
             // Don't clear this.  PvP encounters can be split while Chaotic Growth is active.
             // magicMissileLastHit.Clear();
+
+            unmatchedShieldLines.Clear();
 
             entityOwnerRegistery.Clear();
             playersCharacterFound = false;
@@ -1499,6 +1504,8 @@ namespace Parsing_Plugin
                 ms.Tags.Add("Flank", l.flank);
 
                 ActGlobals.oFormActMain.AddCombatAction(ms);
+
+                unmatchedShieldLines.AddShield(ms, l);
             }
         }
 
@@ -1655,14 +1662,42 @@ namespace Parsing_Plugin
 
             l.logInfo.detectedType = l.critical ? Color.Red.ToArgb() : Color.DarkRed.ToArgb();
 
-            
+            string special = l.special;
+
+            MasterSwing msShielded = unmatchedShieldLines.MatchDamage(l);
+            if (msShielded != null)
+            {
+                // Fix up the shield line.
+
+                double shielded = l.mag / msShielded.Damage;
+
+                msShielded.Tags.Add("ShieldDmgF", l.mag);
+                msShielded.Tags.Add("ShieldP", shielded);
+
+                object val;
+                if (msShielded.Tags.TryGetValue("DamageF", out val))
+                {
+                    float df = (float) val;
+                    string shieldSpecialText = "Shield(" + df.ToString("F1") + ")";
+
+                    if (special == "None")
+                    {
+                        special = shieldSpecialText;
+                    }
+                    else
+                    {
+                        special = l.special + " | " + shieldSpecialText;
+                    }
+                }
+            }
+
             if (l.evtInt == "Autodesc.Combatevent.Falling")
             {
                 // Falling damage does not start combat...
                 if (ActGlobals.oFormActMain.InCombat)
                 {
                     processNamesOST(l);
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                    addCombatAction(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                 }
             }
             else if (l.evtInt == "Pn.Wypyjw1") // Knight's Valor,
@@ -1671,7 +1706,7 @@ namespace Parsing_Plugin
                 // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
 
                 processNamesST(l);
-                addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                addCombatAction(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
             }
             else
             {
@@ -1736,7 +1771,7 @@ namespace Parsing_Plugin
                     {
                         // Generally damaging attacks have mag=0 and magBase > 0 when Immune.
                         l.logInfo.detectedType = Color.Maroon.ToArgb();
-                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.NoDamage, l.mag, l.type, l.magBase);
+                        addCombatAction(l, l.swingType, l.critical, special, l.attackType, Dnum.NoDamage, l.mag, l.type, l.magBase);
                     }
                 }
                 else if (l.dodge)
@@ -1745,7 +1780,7 @@ namespace Parsing_Plugin
                     // I have seen damaging attacks that are both Dodge and Kill in the flags.
                     // So the target dodged but still died.
                     l.logInfo.detectedType = Color.Maroon.ToArgb();
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                    addCombatAction(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                 }
                 else
                 {
@@ -1756,8 +1791,8 @@ namespace Parsing_Plugin
                     }
                     else
                     {
-                        // All attacks have a magBase.
-                        addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                        // NOT All attacks have a magBase (anymore).
+                        addCombatAction(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                     }
                 }
             }
@@ -2187,6 +2222,90 @@ namespace Parsing_Plugin
         public DateTime ts;
     }
 
+    internal class ShieldLine
+    {
+        public MasterSwing ms;
+        public ParsedLine line;
+    }
+
+    internal class UnmatchedShieldLines
+    {
+        // Added new lines to end to maintain FIFO ordering.
+        private LinkedList<ShieldLine> active = new LinkedList<ShieldLine>();
+
+        public UnmatchedShieldLines()
+        {
+        }
+
+        public void Clear()
+        {
+            active.Clear();
+        }
+
+        public void AddShield(MasterSwing ms, ParsedLine line)
+        {
+            ShieldLine sl = new ShieldLine();
+            sl.ms = ms;
+            sl.line = line;
+
+            active.AddLast(sl);
+        }
+
+        public MasterSwing MatchDamage(ParsedLine line)
+        {
+            /*
+            if (active.Count > 30)
+            {
+                // BAD
+                active.Clear();
+                return null;
+            }
+            */
+
+            LinkedListNode<ShieldLine> slnNext = active.First;
+
+            while (slnNext != null)
+            {
+                LinkedListNode<ShieldLine> cur = slnNext;
+                ShieldLine sl = cur.Value;
+                slnNext = slnNext.Next;
+
+                // Examaple:
+                // 13:09:26:09:31:31.2::Lorne Fellbane,P[201332730@6101294 Lorne Fellbane@todesfaelle],,*,HeLLCaT,P[201327748@7398668 HeLLCaT@phantom3535],Bilethorn Weapon,Pn.Nhw1351,Shield,,-1.3,0
+                // 13:09:26:09:31:31.2::Lorne Fellbane,P[201332730@6101294 Lorne Fellbane@todesfaelle],,*,HeLLCaT,P[201327748@7398668 HeLLCaT@phantom3535],Bilethorn Weapon,Pn.Nhw1351,Shield,,-10.9585,0
+                // 13:09:26:09:31:31.2::Lorne Fellbane,P[201332730@6101294 Lorne Fellbane@todesfaelle],HeLLCaT,P[201327748@7398668 HeLLCaT@phantom3535],,*,Bilethorn Weapon,Pn.Nhw1351,Poison,,1.3,6.5
+                // 13:09:26:09:31:31.2::Lorne Fellbane,P[201332730@6101294 Lorne Fellbane@todesfaelle],HeLLCaT,P[201327748@7398668 HeLLCaT@phantom3535],,*,Bilethorn Weapon,Pn.Nhw1351,Poison,,10.9585,54.7925
+
+                // Notice that the Source field doesn't always match...
+
+                // Compare
+                if ((sl.line.evtInt == line.evtInt) &&
+                        (sl.line.ownInt == line.ownInt) &&
+                        // (sl.line.srcInt == line.srcInt) &&
+                        (sl.line.tgtInt == line.tgtInt) &&
+                        (line.type != "Shield")
+                    )
+                {
+                    // Matched
+                    active.Remove(cur);
+                    return sl.ms;
+                }
+                else
+                {
+                    // Check expired.
+                    TimeSpan diff = line.logInfo.detectedTime - sl.ms.Time;
+
+                    if (diff.TotalMilliseconds > 1500)
+                    {
+                        active.Remove(cur);
+                    }
+                }
+            }
+
+            return null;
+        }
+    }
+
     internal enum EntityType
     {
         Player,
@@ -2273,10 +2392,10 @@ namespace Parsing_Plugin
 
 
             kill = critical = flank = dodge = immune = false;
+            special = "None";
             if (flags.Length > 0)
             {
                 int extraFlagCount = 0;
-                special = "None";
                 string[] sflags = flags.Split('|');
                 foreach (string sflag in sflags)
                 {
