@@ -1738,6 +1738,9 @@ namespace NWParsing_Plugin
                 // Tags are about the only thing that can be altered on MS that is already added via AddCombatAction.
                 // So do most of it with adding Tags.
 
+                // Shield line:  add column for attack damage and % blocked
+                // Attack line:  add amount shielded to the 'special' column.
+
                 object val;
                 if (msShielded.Tags.TryGetValue("DamageF", out val))
                 {
@@ -2298,7 +2301,8 @@ namespace NWParsing_Plugin
 
     internal class UnmatchedShieldLines
     {
-        // Added new lines to end to maintain FIFO ordering.
+        // Added new lines to end to maintain FIFO/Time ordering.
+        // Should act as a FIFO if 100% matches.
         private LinkedList<ShieldLine> active = new LinkedList<ShieldLine>();
 
         public UnmatchedShieldLines()
@@ -2356,6 +2360,8 @@ namespace NWParsing_Plugin
 
                     if (diff.TotalMilliseconds > 500)
                     {
+                        // Drop old and unmatch shield lines.
+                        // Generally shield line should match in <= 100ms.
                         active.Remove(cur);
                     }
                 }
