@@ -16,10 +16,12 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
 
 
 /* Version History - npb
+ * 1.1.0.0 - 2013/9/2X
+ *  - Improvements to shield tracking.  Matches shield to damage and adds extra info.
  * 1.0.0.0 - 2013/9/26
  *  - Fixes to shield tracking.
  *  - Fixes to Chaotic Growth tracking.
@@ -1733,6 +1735,8 @@ namespace NWParsing_Plugin
             if (msShielded != null)
             {
                 // Fix up the shield line.
+                // Tags are about the only thing that can be altered on MS that is already added via AddCombatAction.
+                // So do most of it with adding Tags.
 
                 object val;
                 if (msShielded.Tags.TryGetValue("DamageF", out val))
@@ -2317,15 +2321,6 @@ namespace NWParsing_Plugin
 
         public MasterSwing MatchDamage(ParsedLine line)
         {
-            
-            if (active.Count > 30)
-            {
-                // BAD
-                active.Clear();
-                return null;
-            }
-            
-
             LinkedListNode<ShieldLine> slnNext = active.First;
 
             while (slnNext != null)
