@@ -395,8 +395,6 @@ namespace NWParsing_Plugin
             ActGlobals.oFormActMain.OnCombatEnd += new CombatToggleEventDelegate(oFormActMain_OnCombatEnd);
             ActGlobals.oFormActMain.LogFileChanged += new LogFileChangedDelegate(oFormActMain_LogFileChanged);
 
-            // InitializeOwnerIsTheRealSource();
-
             FixupCombatDataStructures();
 
             // Set status text to successfully loaded
@@ -907,13 +905,18 @@ namespace NWParsing_Plugin
             CombatantData.IncomingDamageTypeDataObjects.Remove("Power Drain (Inc)");
             CombatantData.IncomingDamageTypeDataObjects.Remove("Threat (Inc)");
 
-            CombatantData.SwingTypeToDamageTypeDataLinksOutgoing[1].RemoveAt(0);
-            CombatantData.SwingTypeToDamageTypeDataLinksOutgoing[2].RemoveAt(0);
-            CombatantData.SwingTypeToDamageTypeDataLinksOutgoing.Remove(10);
-            CombatantData.SwingTypeToDamageTypeDataLinksOutgoing.Remove(16);
+            try
+            {
+                // Support restarting the plugin.
+                CombatantData.SwingTypeToDamageTypeDataLinksOutgoing[1].RemoveAt(0);
+                CombatantData.SwingTypeToDamageTypeDataLinksOutgoing[2].RemoveAt(0);
+                CombatantData.SwingTypeToDamageTypeDataLinksOutgoing.Remove(10);
+                CombatantData.SwingTypeToDamageTypeDataLinksOutgoing.Remove(16);
 
-            CombatantData.SwingTypeToDamageTypeDataLinksIncoming.Remove(10);
-            CombatantData.SwingTypeToDamageTypeDataLinksIncoming.Remove(16);
+                CombatantData.SwingTypeToDamageTypeDataLinksIncoming.Remove(10);
+                CombatantData.SwingTypeToDamageTypeDataLinksIncoming.Remove(16);
+            }
+            catch (ArgumentOutOfRangeException) { }
 
             CombatantData.ExportVariables.Remove("threatstr");
             CombatantData.ExportVariables.Remove("threatdelta");
@@ -954,6 +957,27 @@ namespace NWParsing_Plugin
 
             ActGlobals.oFormActMain.ValidateLists();
             ActGlobals.oFormActMain.ValidateTableSetup();
+        }
+
+        private void RestoreCombatDataStructures()
+        {
+            CombatantData.ColumnDefs.Remove("FlankDam%");
+            CombatantData.ColumnDefs.Remove("DmgEffect%");
+            CombatantData.ColumnDefs.Remove("DmgTakenEffect%");
+
+            DamageTypeData.ColumnDefs.Remove("FlankHits");
+            DamageTypeData.ColumnDefs.Remove("Flank%");
+            DamageTypeData.ColumnDefs.Remove("Effectiveness");
+
+            AttackType.ColumnDefs.Remove("FlankHits");
+            AttackType.ColumnDefs.Remove("Flank%");
+            AttackType.ColumnDefs.Remove("Effectiveness");
+
+            MasterSwing.ColumnDefs.Remove("Flank");
+            MasterSwing.ColumnDefs.Remove("BaseDamage");
+            MasterSwing.ColumnDefs.Remove("Effectiveness");
+            MasterSwing.ColumnDefs.Remove("DmgToShield");
+            MasterSwing.ColumnDefs.Remove("ShieldP");
         }
 
         void oFormActMain_LogFileChanged(bool IsImport, string NewLogFileName)
@@ -1994,8 +2018,15 @@ namespace NWParsing_Plugin
                     ActGlobals.oFormActMain.OptionsTreeView.Nodes[i].Remove();
             }
 
-            //purgePetCache();
             SaveSettings();
+
+            unmatchedShieldLines.Clear();
+            entityOwnerRegistery.Clear();
+            petOwnerRegistery.Clear();
+            magicMissileLastHit.Clear();
+
+            RestoreCombatDataStructures();
+
             lblStatus.Text = "Neverwinter ACT plugin unloaded";
         }
 
