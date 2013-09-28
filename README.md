@@ -26,6 +26,8 @@ Known Issues
 ============
 - Devoted Cleric power "Flame Strike" causes falling damage that can not be tracked.  Falling damage does not specify who/what caused the fall.
 - There is currently no way to detect zone changes from the Combatlog.Log file.
+- When updating your plugin you may get a "plugin initialization failed" error.  The workaround is to remove the old plugin, restart ACT, and add the new plugin.
+- injuries are counted as outgoing damage.  (Feature?)
 
 
 Install
