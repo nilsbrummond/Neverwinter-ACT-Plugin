@@ -569,6 +569,64 @@ namespace NWParsing_Plugin
             return Data.Damage.ToString();
         }
 
+        private float GetDmgToShieldValue(MasterSwing Data)
+        {
+            object d;
+            if (Data.Tags.TryGetValue("ShieldDmgF", out d))
+            {
+                float df = (float)d;
+                return df;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+        private string GetCellDataDmgToShield(MasterSwing Data)
+        {
+            return GetDmgToShieldValue(Data).ToString("F1");
+        }
+
+        private string GetSqlDataDmgToShield(MasterSwing Data)
+        {
+            return GetDmgToShieldValue(Data).ToString("F1");
+        }
+
+        private int MasterSwingCompareDmgToShield(MasterSwing Left, MasterSwing Right)
+        {
+            return GetDmgToShieldValue(Left).CompareTo(GetDmgToShieldValue(Right));
+        }
+
+        private float GetShieldPValue(MasterSwing Data)
+        {
+            object d;
+            if (Data.Tags.TryGetValue("ShieldP", out d))
+            {
+                float df = (float)d;
+                return df;
+            }
+            else
+            {
+                return 0;
+            }
+        }
+
+        private string GetCellDataShieldP(MasterSwing Data)
+        {
+            return GetShieldPValue(Data).ToString("P1");
+        }
+
+        private string GetSqlDataShieldP(MasterSwing Data)
+        {
+            return GetShieldPValue(Data).ToString("P1");
+        }
+
+        private int MasterSwingCompareShieldP(MasterSwing Left, MasterSwing Right)
+        {
+            return GetShieldPValue(Left).CompareTo(GetShieldPValue(Right));
+        }
+
         private int GetDTFlankValue(DamageTypeData Data)
         {
             if (Data.Items.Count == 0) return 0;
@@ -817,6 +875,7 @@ namespace NWParsing_Plugin
             return GetDTEffectivenessValue(Left.Items["Incoming Damage"]).CompareTo(GetDTEffectivenessValue(Right.Items["Incoming Damage"]));
         }
 
+
         private void FixupCombatDataStructures()
         {
             // - Remove data types that do not apply to Neverwinter combat logs.
@@ -884,6 +943,12 @@ namespace NWParsing_Plugin
 
             MasterSwing.ColumnDefs.Add("Effectiveness",
                 new MasterSwing.ColumnDef("Effectiveness", true, "VARCHAR(8)", "EffectivenessString", GetCellDataEffectiveness, GetSqlDataEffectiveness, MasterSwingCompareEffectiveness));
+
+            MasterSwing.ColumnDefs.Add("DmgToShield",
+                new MasterSwing.ColumnDef("DmgToShield", false, "VARCHAR(128)", "DmgToShieldstring", GetCellDataDmgToShield, GetSqlDataDmgToShield, MasterSwingCompareDmgToShield));
+
+            MasterSwing.ColumnDefs.Add("ShieldP",
+                new MasterSwing.ColumnDef("ShieldP", false, "VARCHAR(8)", "ShieldPDtring", GetCellDataShieldP, GetSqlDataShieldP, MasterSwingCompareShieldP));
 
             ActGlobals.oFormActMain.ValidateLists();
             ActGlobals.oFormActMain.ValidateTableSetup();
@@ -1669,11 +1734,6 @@ namespace NWParsing_Plugin
             {
                 // Fix up the shield line.
 
-                double shielded = l.mag / msShielded.Damage;
-
-                msShielded.Tags.Add("ShieldDmgF", l.mag);
-                msShielded.Tags.Add("ShieldP", shielded);
-
                 object val;
                 if (msShielded.Tags.TryGetValue("DamageF", out val))
                 {
@@ -1688,6 +1748,10 @@ namespace NWParsing_Plugin
                     {
                         special = l.special + " | " + shieldSpecialText;
                     }
+
+                    float shielded = df / l.mag;
+                    msShielded.Tags.Add("ShieldDmgF", l.mag);
+                    msShielded.Tags.Add("ShieldP", shielded);
                 }
             }
 
@@ -2253,14 +2317,14 @@ namespace NWParsing_Plugin
 
         public MasterSwing MatchDamage(ParsedLine line)
         {
-            /*
+            
             if (active.Count > 30)
             {
                 // BAD
                 active.Clear();
                 return null;
             }
-            */
+            
 
             LinkedListNode<ShieldLine> slnNext = active.First;
 
@@ -2295,7 +2359,7 @@ namespace NWParsing_Plugin
                     // Check expired.
                     TimeSpan diff = line.logInfo.detectedTime - sl.ms.Time;
 
-                    if (diff.TotalMilliseconds > 1500)
+                    if (diff.TotalMilliseconds > 500)
                     {
                         active.Remove(cur);
                     }
