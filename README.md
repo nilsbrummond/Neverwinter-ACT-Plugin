@@ -5,6 +5,7 @@ An plugin for ACT (Advanced Combat Tracker) to parse combat log file from Neverw
 
 - ACT is found at http://advancedcombattracker.com/
 - D&D Neverwinter is found at http://nw.perfectworld.com/
+- The released version of this plugin can be downloaded from https://s3.amazonaws.com/nw-act-plugin/Neverwinter.cs
 
 This plugin is based on the version 0.0.5.1 plugin by Antday \<Unique\>, 
 which is based on the STO plugin from Hilbert @ mancom, Pirye @ ucalegon.
@@ -34,7 +35,7 @@ Known Issues
 Install
 =======
 
-- Download the Neverwinter.cs file to your computer.
+- Download the Neverwinter.cs file to your computer from https://s3.amazonaws.com/nw-act-plugin/Neverwinter.cs.
 - In the Neverwinter game use the command "/Combatlog 1" to begin logging to a file.  
 - From ACT goto the plugins tab and "browse..." to and then enable the Neverwinter.cs plugin.  
 - Goto the option tab now.   Select the Miscellaneous category and use the "Open log" button.  Select the file "C:\Users\Public\Games\Cryptic Studios\Neverwinter\Live\Logs\GameClient\Combatlog.Log".
