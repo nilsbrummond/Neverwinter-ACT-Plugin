@@ -16,11 +16,11 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.0.2.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
 
 
 /* Version History - npb
- * 1.1.0.0 - 2013/9/2X
+ * 1.1.0.0 - 2013/9/29
  *  - Improvements to shield tracking.  Matches shield to damage and adds extra info.
  *  - Fix to prevent plugin to fail to load.
  * 1.0.0.0 - 2013/9/26
