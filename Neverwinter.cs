@@ -16,11 +16,13 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.1.0.1")]
+[assembly: AssemblyVersion("1.1.0.2")]
 
 
 /* Version History - npb
  * 1.2.x.x - 2013/x/x
+ *  - Handle round off error for small numbers better.  ACT int damage vs NW floating point damage issues.
+ *    Damage rounding down to zero has some odd effects.
  *  - Better startup to have clean plugin startup so to avoid plugin failure to load.
  * 1.1.0.0 - 2013/9/29
  *  - Improvements to shield tracking.  Matches shield to damage and adds extra info.
@@ -560,12 +562,14 @@ namespace NWParsing_Plugin
 
         private string GetCellDataDamage(MasterSwing Data)
         {
-            if (Data.Damage > 0)
+            object d;
+            if (Data.Tags.TryGetValue("DamageF", out d))
             {
-                object d;
-                Data.Tags.TryGetValue("DamageF", out d);
-                float df = (float) d;
-                return df.ToString("F1");
+                float df = (float)d;
+                if (df > 0.0)
+                {
+                    return df.ToString("F1");
+                }
             }
 
             return Data.Damage.ToString();
@@ -2252,7 +2256,7 @@ namespace NWParsing_Plugin
             // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Shield,,-559.613,-247.663
             // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Radiant,,154.608,349.348
             // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Arcane,,247.663,559.613
-
+            
             // NOTE:
             // Notice that the mag and magBase numbers are swap in the shield line verse the damage line.
             // Therefore the amount shield == magBase ???
@@ -2283,7 +2287,7 @@ namespace NWParsing_Plugin
                 float magBase = 0;
 
                 // This is just weird...
-                if (magBaseAdj == 0)
+                if (l.magBase == 0) // Don't use magBaseAdj here.  Rounded to zero is not zero.
                 {
                     shielded = new Dnum( -magAdj );
                     mag = -l.mag;
@@ -3082,12 +3086,31 @@ namespace NWParsing_Plugin
 
                 // Notice that the Source field doesn't always match...
 
+                /* Odd case of zero damage:
+13:09:26:09:36:11.8::briserus,P[201401849@8271148 briserus@briserus],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Flaming Weapon,Pn.Mzftfj,Shield,,-2,-0.484209
+13:09:26:09:36:11.8::briserus,P[201401849@8271148 briserus@briserus],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Flaming Weapon,Pn.Mzftfj,Shield,,-2,-0.242104
+13:09:26:09:36:11.8::briserus,P[201401849@8271148 briserus@briserus],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Flaming Weapon,Pn.Mzftfj,Fire,Dodge,0,0
+13:09:26:09:36:11.8::briserus,P[201401849@8271148 briserus@briserus],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Flaming Weapon,Pn.Mzftfj,Fire,,0,0
+13:09:26:09:36:11.8::briserus,P[201401849@8271148 briserus@briserus],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Flaming Weapon,Pn.Mzftfj,Fire,,0.484209,2
+13:09:26:09:36:11.8::briserus,P[201401849@8271148 briserus@briserus],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Flaming Weapon,Pn.Mzftfj,Fire,Dodge,0.242104,2
+                */
+
+                /* Two Shield lines for one damage line:  TODO: Handle this...
+13:09:26:09:36:20.8::DRUGnROLL,P[200404637@6548010 DRUGnROLL@drugnroll],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Entangling Force,Pn.Oonws91,Shield,,-17.2139,-3.44278
+13:09:26:09:36:20.8::DRUGnROLL,P[200404637@6548010 DRUGnROLL@drugnroll],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Entangling Force,Pn.Oonws91,Shield,,-340.835,0
+13:09:26:09:36:20.8::Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],,*,,*,Health Steal,Pn.S6b30w1,HitPoints,,-0.0190611,0
+13:09:26:09:36:20.8::Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],,*,,*,Health Steal,Pn.S6b30w1,HitPoints,,-0.117442,0
+13:09:26:09:36:20.8::DRUGnROLL,P[200404637@6548010 DRUGnROLL@drugnroll],,*,Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],Entangling Force,Pn.Oonws91,Arcane,Critical,344.278,1721.39
+13:09:26:09:36:20.9::Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],,*,,*,Shielded Resurgence,Pn.Mrczs41,Null,ShowPowerDisplayName,0,0
+                */
+
                 // Compare
                 if ((sl.line.evtInt == line.evtInt) &&
                         (sl.line.ownInt == line.ownInt) &&
                         // (sl.line.srcInt == line.srcInt) &&
                         (sl.line.tgtInt == line.tgtInt) &&
-                        (line.type != "Shield")
+                        (line.type != "Shield") &&
+                        (line.mag > 0.0)  // <- Skip zero damage lines.
                     )
                 {
                     // Matched
