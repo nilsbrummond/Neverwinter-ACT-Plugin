@@ -16,10 +16,12 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyVersion("1.1.0.1")]
 
 
 /* Version History - npb
+ * 1.2.x.x - 2013/x/x
+ *  - Better startup to have clean plugin startup so to avoid plugin failure to load.
  * 1.1.0.0 - 2013/9/29
  *  - Improvements to shield tracking.  Matches shield to damage and adds extra info.
  *  - Fix to prevent plugin to fail to load.
@@ -938,6 +940,7 @@ namespace NWParsing_Plugin
             EncounterData.ExportVariables.Add("kills", new EncounterData.TextExportFormatter("kills", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-kills"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-kills"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "kills", Extra); }));
             EncounterData.ExportVariables.Add("deaths", new EncounterData.TextExportFormatter("deaths", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-deaths"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-deaths"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "deaths", Extra); }));
 
+
             CombatantData.ColumnDefs.Clear();
             CombatantData.ColumnDefs.Add("EncId", new CombatantData.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.Parent.EncId; }, (Left, Right) => { return 0; }));
             CombatantData.ColumnDefs.Add("Ally", new CombatantData.ColumnDef("Ally", false, "CHAR(1)", "Ally", (Data) => { return Data.Parent.GetAllies().Contains(Data).ToString(); }, (Data) => { return Data.Parent.GetAllies().Contains(Data) ? "T" : "F"; }, (Left, Right) => { return Left.Parent.GetAllies().Contains(Left).CompareTo(Right.Parent.GetAllies().Contains(Right)); }));
@@ -980,6 +983,7 @@ namespace NWParsing_Plugin
             CombatantData.ColumnDefs.Add("DmgTakenEffect%",
                 new CombatantData.ColumnDef("DmgTakenEffect%", false, "VARCHAR(8)", "DmgTakenEffectPrec", GetCellDataDmgTakenEffectPrec, GetSqlDataDmgTakenEffectPrec, CDCompareDmgTakenEffectPrec));
 
+
             CombatantData.OutgoingDamageTypeDataObjects = new Dictionary<string, CombatantData.DamageTypeDef>
 		{
 			//{"Auto-Attack (Out)", new CombatantData.DamageTypeDef("Auto-Attack (Out)", -1, Color.DarkGoldenrod)},
@@ -1007,20 +1011,16 @@ namespace NWParsing_Plugin
 			{1, new List<string> { "Outgoing Damage" } },
 			{2, new List<string> { "Outgoing Damage" } },
 			{3, new List<string> { "Healed (Out)" } },
-			//{10, new List<string> { "Power Drain (Out)" } },
 			{13, new List<string> { "Power Replenish (Out)" } },
 			{20, new List<string> { "Cure/Dispel (Out)" } }
-			//{16, new List<string> { "Threat (Out)" } }
 		};
             CombatantData.SwingTypeToDamageTypeDataLinksIncoming = new SortedDictionary<int, List<string>>
 		{ 
 			{1, new List<string> { "Incoming Damage" } },
 			{2, new List<string> { "Incoming Damage" } },
 			{3, new List<string> { "Healed (Inc)" } },
-			//{10, new List<string> { "Power Drain (Inc)" } },
 			{13, new List<string> { "Power Replenish (Inc)" } },
 			{20, new List<string> { "Cure/Dispel (Inc)" } }
-			//{16, new List<string> { "Threat (Inc)" } }
 		};
 
             CombatantData.DamageSwingTypes = new List<int> { 1, 2 };
@@ -1031,6 +1031,7 @@ namespace NWParsing_Plugin
             CombatantData.DamageTypeDataOutgoingHealing = "Healed (Out)";
             CombatantData.DamageTypeDataIncomingDamage = "Incoming Damage";
             CombatantData.DamageTypeDataIncomingHealing = "Healed (Inc)";
+
 
             CombatantData.ExportVariables.Clear();
             CombatantData.ExportVariables.Add("n", new CombatantData.TextExportFormatter("n", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-newline"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-newline"].DisplayedText, (Data, Extra) => { return "\n"; }));
@@ -1096,6 +1097,7 @@ namespace NWParsing_Plugin
             CombatantData.ExportVariables.Add("NAME14", new CombatantData.TextExportFormatter("NAME14", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME14"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME14"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME14", Extra); }));
             CombatantData.ExportVariables.Add("NAME15", new CombatantData.TextExportFormatter("NAME15", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME15"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME15"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME15", Extra); }));
 
+
             DamageTypeData.ColumnDefs.Clear();
             DamageTypeData.ColumnDefs.Add("EncId", new DamageTypeData.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.Parent.Parent.EncId; }));
             DamageTypeData.ColumnDefs.Add("Combatant", new DamageTypeData.ColumnDef("Combatant", false, "VARCHAR(64)", "Combatant", (Data) => { return Data.Parent.Name; }, (Data) => { return Data.Parent.Name; }));
@@ -1127,6 +1129,7 @@ namespace NWParsing_Plugin
                 new DamageTypeData.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec));
             DamageTypeData.ColumnDefs.Add("Effectiveness",
                 new DamageTypeData.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness));
+
 
             AttackType.ColumnDefs.Clear();
             AttackType.ColumnDefs.Add("EncId", new AttackType.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.Parent.Parent.Parent.EncId; }, (Left, Right) => { return 0; }));
@@ -1177,6 +1180,7 @@ namespace NWParsing_Plugin
             
             MasterSwing.ColumnDefs.Add("Damage",
                 new MasterSwing.ColumnDef("Damage", true, "VARCHAR(128)", "DamageString", GetCellDataDamage, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
+
             MasterSwing.ColumnDefs.Add("Critical", new MasterSwing.ColumnDef("Critical", true, "CHAR(1)", "Critical", /* anonymous */ delegate(MasterSwing Data) { return Data.Critical.ToString(); }, delegate(MasterSwing Data) { return Data.Critical.ToString(usCulture)[0].ToString(); }, delegate(MasterSwing Left, MasterSwing Right) { return Left.Critical.CompareTo(Right.Critical); }));
             // Or also written as(delegated methods):
             MasterSwing.ColumnDefs.Add("Special", new MasterSwing.ColumnDef("Special", true, "VARCHAR(64)", "Special", /* delegate */ GetCellDataSpecial, GetSqlDataSpecial, MasterSwingCompareSpecial));
@@ -1195,82 +1199,8 @@ namespace NWParsing_Plugin
 
             ActGlobals.oFormActMain.ValidateLists();
             ActGlobals.oFormActMain.ValidateTableSetup();
-
-
-            // OLD ....
-
-            EncounterData.ExportVariables.Remove("maxhealward");
-            EncounterData.ExportVariables.Remove("MAXHEALWARD");
-            EncounterData.ExportVariables.Remove("powerdrain");
-
-            CombatantData.ColumnDefs.Remove("PowerDrain");
-            CombatantData.ColumnDefs.Remove("Threat +/-");
-            CombatantData.ColumnDefs.Remove("ThreatDelta");
-
-            CombatantData.ColumnDefs.Add("FlankDam%",
-                new CombatantData.ColumnDef("FlankDam%", false, "VARCHAR(8)", "FlankDamPrec", GetCellDataFlankDamPrec, GetSqlDataFlankDamPrec, CDCompareFlankDamPrec));
-            CombatantData.ColumnDefs.Add("DmgEffect%",
-                new CombatantData.ColumnDef("DmgEffect%", false, "VARCHAR(8)", "DmgEffectPrec", GetCellDataDmgEffectPrec, GetSqlDataDmgEffectPrec, CDCompareDmgEffectPrec));
-            CombatantData.ColumnDefs.Add("DmgTakenEffect%",
-                new CombatantData.ColumnDef("DmgTakenEffect%", false, "VARCHAR(8)", "DmgTakenEffectPrec", GetCellDataDmgTakenEffectPrec, GetSqlDataDmgTakenEffectPrec, CDCompareDmgTakenEffectPrec));
-
-
-            CombatantData.OutgoingDamageTypeDataObjects.Remove("Auto-Attack (Out)");
-            CombatantData.OutgoingDamageTypeDataObjects.Remove("Skill/Ability (Out)");
-            CombatantData.OutgoingDamageTypeDataObjects.Remove("Power Drain (Out)");
-            CombatantData.OutgoingDamageTypeDataObjects.Remove("Threat (Out)");
-
-            CombatantData.IncomingDamageTypeDataObjects.Remove("Power Drain (Inc)");
-            CombatantData.IncomingDamageTypeDataObjects.Remove("Threat (Inc)");
-
-            try
-            {
-                // Support restarting the plugin.
-                CombatantData.SwingTypeToDamageTypeDataLinksOutgoing[1].RemoveAt(0);
-                CombatantData.SwingTypeToDamageTypeDataLinksOutgoing[2].RemoveAt(0);
-                CombatantData.SwingTypeToDamageTypeDataLinksOutgoing.Remove(10);
-                CombatantData.SwingTypeToDamageTypeDataLinksOutgoing.Remove(16);
-
-                CombatantData.SwingTypeToDamageTypeDataLinksIncoming.Remove(10);
-                CombatantData.SwingTypeToDamageTypeDataLinksIncoming.Remove(16);
-            }
-            catch (ArgumentOutOfRangeException) { }
-
-            CombatantData.ExportVariables.Remove("threatstr");
-            CombatantData.ExportVariables.Remove("threatdelta");
-            CombatantData.ExportVariables.Remove("maxhealward");
-            CombatantData.ExportVariables.Remove("MAXHEALWARD");
-
-            DamageTypeData.ColumnDefs.Add("FlankHits", 
-                new DamageTypeData.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits));
-            DamageTypeData.ColumnDefs.Add("Flank%",
-                new DamageTypeData.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec)); 
-            DamageTypeData.ColumnDefs.Add("Effectiveness",
-                new DamageTypeData.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness));
-
-            AttackType.ColumnDefs.Add("FlankHits",
-                new AttackType.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits, AttackTypeCompareFlankHits));
-            AttackType.ColumnDefs.Add("Flank%",
-                new AttackType.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec, AttackTypeCompareFlankPrec));
-            AttackType.ColumnDefs.Add("Effectiveness",
-                new AttackType.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness, AttackTypeCompareEffectiveness));
-
-            MasterSwing.ColumnDefs["Damage"] =
-                new MasterSwing.ColumnDef("Damage", true, "VARCHAR(128)", "DamageString", GetCellDataDamage, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); });
-            MasterSwing.ColumnDefs.Add("Flank", 
-                new MasterSwing.ColumnDef("Flank", true, "CHAR(1)", "Flank", GetCellDataFlank, GetSqlDataFlank, MasterSwingCompareFlank));
-            MasterSwing.ColumnDefs.Add("BaseDamage",
-                new MasterSwing.ColumnDef("BaseDamage", true, "INT", "BaseDamageString", GetCellDataBaseDamage, GetSqlDataBaseDamage, MasterSwingCompareBaseDamage));
-            MasterSwing.ColumnDefs.Add("Effectiveness",
-                new MasterSwing.ColumnDef("Effectiveness", true, "VARCHAR(8)", "EffectivenessString", GetCellDataEffectiveness, GetSqlDataEffectiveness, MasterSwingCompareEffectiveness));
-            MasterSwing.ColumnDefs.Add("DmgToShield",
-                new MasterSwing.ColumnDef("DmgToShield", false, "VARCHAR(128)", "DmgToShieldstring", GetCellDataDmgToShield, GetSqlDataDmgToShield, MasterSwingCompareDmgToShield));
-            MasterSwing.ColumnDefs.Add("ShieldP",
-                new MasterSwing.ColumnDef("ShieldP", false, "VARCHAR(8)", "ShieldPDtring", GetCellDataShieldP, GetSqlDataShieldP, MasterSwingCompareShieldP));
-
-            ActGlobals.oFormActMain.ValidateLists();
-            ActGlobals.oFormActMain.ValidateTableSetup();
         }
+
         private string EncounterFormatSwitch(EncounterData Data, List<CombatantData> SelectiveAllies, string VarName, string Extra)
         {
             long damage = 0;
@@ -1462,6 +1392,7 @@ namespace NWParsing_Plugin
                     return VarName;
             }
         }
+
         private string CombatantFormatSwitch(CombatantData Data, string VarName, string Extra)
         {
             int len = 0;
@@ -1618,18 +1549,22 @@ namespace NWParsing_Plugin
                     return VarName;
             }
         }
+
         private string GetCellDataSpecial(MasterSwing Data)
         {
             return Data.Special;
         }
+
         private string GetSqlDataSpecial(MasterSwing Data)
         {
             return Data.Special;
         }
+
         private int MasterSwingCompareSpecial(MasterSwing Left, MasterSwing Right)
         {
             return Left.Special.CompareTo(Right.Special);
         }
+
         private string GetAttackTypeSwingType(AttackType Data)
         {
             int swingType = 100;
@@ -1646,6 +1581,7 @@ namespace NWParsing_Plugin
 
             return swingType.ToString();
         }
+
         private string GetDamageTypeGrouping(DamageTypeData Data)
         {
             string grouping = string.Empty;
@@ -1682,6 +1618,7 @@ namespace NWParsing_Plugin
 
             return grouping;
         }
+
         private float GetFilteredCritChance(CombatantData Data)
         {
             List<AttackType> allAttackTypes = new List<AttackType>();
@@ -1753,27 +1690,6 @@ namespace NWParsing_Plugin
                 else
                     return float.NaN;
             }
-        }
-
-        private void RestoreCombatDataStructures()
-        {
-            CombatantData.ColumnDefs.Remove("FlankDam%");
-            CombatantData.ColumnDefs.Remove("DmgEffect%");
-            CombatantData.ColumnDefs.Remove("DmgTakenEffect%");
-
-            DamageTypeData.ColumnDefs.Remove("FlankHits");
-            DamageTypeData.ColumnDefs.Remove("Flank%");
-            DamageTypeData.ColumnDefs.Remove("Effectiveness");
-
-            AttackType.ColumnDefs.Remove("FlankHits");
-            AttackType.ColumnDefs.Remove("Flank%");
-            AttackType.ColumnDefs.Remove("Effectiveness");
-
-            MasterSwing.ColumnDefs.Remove("Flank");
-            MasterSwing.ColumnDefs.Remove("BaseDamage");
-            MasterSwing.ColumnDefs.Remove("Effectiveness");
-            MasterSwing.ColumnDefs.Remove("DmgToShield");
-            MasterSwing.ColumnDefs.Remove("ShieldP");
         }
 
         void oFormActMain_LogFileChanged(bool IsImport, string NewLogFileName)
@@ -2820,8 +2736,6 @@ namespace NWParsing_Plugin
             entityOwnerRegistery.Clear();
             petOwnerRegistery.Clear();
             magicMissileLastHit.Clear();
-
-            RestoreCombatDataStructures();
 
             lblStatus.Text = "Neverwinter ACT plugin unloaded";
         }
