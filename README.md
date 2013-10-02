@@ -30,6 +30,7 @@ Known Issues
 - There is currently no way to detect zone changes from the Combatlog.Log file.
 - When updating your plugin you may get a "plugin initialization failed" error.  The workaround is to remove the old plugin, restart ACT, and add the new plugin.
 - injuries are counted as outgoing damage.  (Feature?)
+- Cleric Disciple companions Sacred Flame temp HP effect is credited to the owner of the companion.
 
 
 Install
