@@ -16,11 +16,11 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.1.0.2")]
+[assembly: AssemblyVersion("1.2.0.0")]
 
 
 /* Version History - npb
- * 1.2.x.x - 2013/x/x
+ * 1.2.0.0 - 2013/10/2
  *  - Handle round off error for small numbers better.  ACT int damage vs NW floating point damage issues.
  *    Damage rounding down to zero has some odd effects.
  *  - Better startup to have clean plugin startup so to avoid plugin failure to load.
