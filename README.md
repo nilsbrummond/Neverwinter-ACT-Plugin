@@ -20,7 +20,7 @@ State
 - Combat log colored.
 - Companion Pet's owners tracked.
 - Damage base recording and effectiveness (dmg / dmgBase)
-- Added 'Flank' (Combat Advantage?) as it's own column they way Critical Hits are.
+- Added 'Flank' (Combat Advantage?) as it's own column the way Critical Hits are.
 - Removed Column types and features of ACT that are not used by the NW plugin.
 
 
@@ -35,7 +35,6 @@ Known Issues
 
 Install
 =======
-
 - Download the Neverwinter.cs file to your computer from [HERE](https://s3.amazonaws.com/nw-act-plugin/Neverwinter.cs).
 - In the Neverwinter game use the command "/Combatlog 1" to begin logging to a file.  
 - From ACT goto the plugins tab and "browse..." to and then enable the Neverwinter.cs plugin.  
