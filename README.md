@@ -35,6 +35,7 @@ Known Issues
 
 Install
 =======
+- If you don't have ACT installed then get it from [HERE] (http://advancedcombattracker.com/download.php) and install it.
 - Download the Neverwinter.cs file to your computer from [HERE](https://s3.amazonaws.com/nw-act-plugin/Neverwinter.cs).
 - In the Neverwinter game use the command "/Combatlog 1" to begin logging to a file.  
 - From ACT goto the plugins tab and "browse..." to and then enable the Neverwinter.cs plugin.  
