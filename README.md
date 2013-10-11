@@ -40,6 +40,8 @@ Install
 - From ACT goto the plugins tab and "browse..." to and then enable the Neverwinter.cs plugin.  
 - Goto the option tab now.   Select the Miscellaneous category and use the "Open log" button.  Select the file "C:\Users\Public\Games\Cryptic Studios\Neverwinter\Live\Logs\GameClient\Combatlog.Log".
 
+Note: For the Neverwinter Preview server the combat log file is:
+  "C:\Users\Public\Games\Cryptic Studios\Neverwinter\Playtest\logs\GameClient\Combatlog.Log"
 
 Non-standard Column Types
 =========================
