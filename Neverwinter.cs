@@ -20,7 +20,7 @@ using System.Net;
 
 
 /* Version History - npb
- * 1.2.x.0 - 2013/10/13
+ * 1.2.1.0 - 2013/10/13
  *  - Fix healing keeping encounters from ending.
  *  - Filtered out minor injuries from showing up.
  * 1.2.0.0 - 2013/10/2
