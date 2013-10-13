@@ -16,10 +16,13 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.2.0.0")]
+[assembly: AssemblyVersion("1.2.1.0")]
 
 
 /* Version History - npb
+ * 1.2.x.0 - 2013/10/13
+ *  - Fix healing keeping encounters from ending.
+ *  - Filtered out minor injuries from showing up.
  * 1.2.0.0 - 2013/10/2
  *  - Handle round off error for small numbers better.  ACT int damage vs NW floating point damage issues.
  *    Damage rounding down to zero has some odd effects.
@@ -2134,6 +2137,8 @@ namespace NWParsing_Plugin
 
             l.logInfo.detectedType = l.critical ? Color.Green.ToArgb() : Color.DarkGreen.ToArgb();
 
+            // NOTE: Do NOT use SetEncounter() on heals (i.e Non-Hostile Actions)
+
             // Heals can not start an encounter.
             if (ActGlobals.oFormActMain.InCombat)
             {
@@ -2144,15 +2149,11 @@ namespace NWParsing_Plugin
                 // 13:07:09:14:00:23.2::Rune,C[317 Pvp_Rune_Heal],,*,Mus'Mugen Uhlaalaa,P[201045055@5998737 Mus'Mugen Uhlaalaa@bupfen],Heal,Pn.R0jdk,HitPoints,,-1136.92,0
 
                 if (l.evtInt == "Pn.R0jdk") // Assume this is PVP Rune Heal for now...
-                {
-                    // Use encounter names attacker and target here.  This allows filtering
-                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
-                    {
-                        AddCombatAction(
-                            (int)SwingTypeEnum.Healing, l.critical, false, l.special, l.unitTargetName,
-                            "PVP Heal Rune", new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
-                            l.ts, l.unitTargetName, l.type);
-                    }
+                {   
+                    AddCombatActionNW(
+                        (int)SwingTypeEnum.Healing, l.critical, false, l.special, l.unitTargetName,
+                        "PVP Heal Rune", new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
+                        l.ts, l.unitTargetName, l.type);
                 }
                 else if (l.evtInt == "Pn.Hemuxg") // PvP Kill downed player
                 {
@@ -2174,14 +2175,10 @@ namespace NWParsing_Plugin
                     // Note: Trying to eliminate the [unknown] source.
                     // 13:07:10:11:02:20.6::,,,,Brandeor,P[201267923@5148411 Brandeor@brandeor],Campfire,Pn.Dbm4um1,HitPoints,,-525.321,0
 
-                    // Use encounter names attacker and target here.  This allows filtering
-                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
-                    {
-                        AddCombatAction(
-                            (int)SwingTypeEnum.Healing, l.critical, false, l.special, l.unitTargetName,
-                            l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
-                            l.ts, l.unitTargetName, l.type);
-                    }
+                    AddCombatActionNW(
+                        (int)SwingTypeEnum.Healing, l.critical, false, l.special, l.unitTargetName,
+                        l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
+                        l.ts, l.unitTargetName, l.type);                    
                 }
                 else if (l.evtInt == "Pn.Zrqjy1") // Chaotic Growth
                 {
@@ -2205,9 +2202,10 @@ namespace NWParsing_Plugin
                         }
 
                         // Use encounter names attacker and target here.  This allows filtering
+                        // NOTE: Use SetEncounter() as this heal is part of a hostile action.
                         if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, cgi.encName, l.encTargetName))
                         {
-                            AddCombatAction(
+                            AddCombatActionNW(
                                 (int)SwingTypeEnum.Healing, l.critical, l.flank, l.unitAttackerName, cgi.unitName,
                                 l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
@@ -2219,9 +2217,10 @@ namespace NWParsing_Plugin
                     if (!handled)
                     {
                         // Use encounter names attacker and target here.  This allows filtering
+                        // NOTE: Use SetEncounter() as this heal is part of a hostile action.
                         if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
                         {
-                            AddCombatAction(
+                            AddCombatActionNW(
                                 (int)SwingTypeEnum.Healing, l.critical, l.flank, l.unitAttackerName, unk,
                                 l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
@@ -2240,7 +2239,11 @@ namespace NWParsing_Plugin
                 else
                 {
                     // Default heal.
-                    addCombatAction(l, (int)SwingTypeEnum.Healing, l.critical, l.special, l.attackType, new Dnum(-magAdj), -l.mag, l.type);
+
+                    AddCombatActionNW(
+                        (int)SwingTypeEnum.Healing, l.critical, l.flank, l.special, l.unitAttackerName,
+                        l.attackType, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
+                        l.ts, l.unitTargetName, l.type);
                 }
             }
         }
@@ -2277,6 +2280,7 @@ namespace NWParsing_Plugin
             processNamesOST(l);
 
             // Use encounter names attacker and target here.  This allows filtering
+            // Hostile action triggered.  Use SetEncounter().
             if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
             {
                 // Put the attacker and the attack type in the special field.
@@ -2326,7 +2330,11 @@ namespace NWParsing_Plugin
             if (ActGlobals.oFormActMain.InCombat)
             {
                 processNamesOST(l);
-                addCombatAction(l, (int)SwingTypeEnum.CureDispel, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
+
+                AddCombatActionNW(
+                    (int)SwingTypeEnum.CureDispel, l.critical, l.flank, l.special, 
+                    l.unitAttackerName, l.attackType, Dnum.NoDamage, l.mag, l.magBase, 
+                    l.logInfo.detectedTime, l.ts, l.unitTargetName, l.type );
             }
         }
 
@@ -2336,6 +2344,8 @@ namespace NWParsing_Plugin
             //int magBaseAdj = (int)Math.Round(l.magBase * 10);
 
             l.logInfo.detectedType = Color.Black.ToArgb();
+
+            // NOTE: Do NOT use SetEncounter() on power (i.e Non-Hostile Actions)
 
             if (ActGlobals.oFormActMain.InCombat)
             {
@@ -2363,13 +2373,12 @@ namespace NWParsing_Plugin
                     processNamesTargetOnly(l);
 
                     // Target is the source as well.
-                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.tgtDsp, l.tgtDsp))
-                    {
-                        AddCombatAction(
-                            (int)SwingTypeEnum.PowerHealing, l.critical, false, "", "Trickster [" + l.tgtDsp + "]",
-                            "Bait and Switch", new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
-                            l.ts, l.tgtDsp, l.type);
-                    }
+
+                    AddCombatActionNW(
+                        (int)SwingTypeEnum.PowerHealing, l.critical, false, "", "Trickster [" + l.tgtDsp + "]",
+                        "Bait and Switch", new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
+                        l.ts, l.tgtDsp, l.type);
+
                 }
                 else if (l.evtInt == "Pn.Jy04um1") // Guard Break
                 {
@@ -2383,18 +2392,10 @@ namespace NWParsing_Plugin
 
                     processNamesST(l);
 
-                    if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.unitTargetName, l.unitTargetName))
-                    {
-//                        ActGlobals.oFormActMain.AddCombatAction(
-//                            (int)SwingTypeEnum.PowerHealing, l.critical, l.unitAttackerName, l.unitTargetName,
-//                            l.evtDsp, new Dnum(-magAdj), l.logInfo.detectedTime,
-//                            l.ts, l.unitTargetName, l.type); 
-
-                        AddCombatAction(
-                            (int)SwingTypeEnum.PowerHealing, l.critical, false, l.unitAttackerName, l.unitTargetName,
-                            l.evtDsp, new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
-                            l.ts, l.unitTargetName, l.type);
-                    }
+                    AddCombatActionNW(
+                        (int)SwingTypeEnum.PowerHealing, l.critical, false, l.unitAttackerName, l.unitTargetName,
+                        l.evtDsp, new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
+                        l.ts, l.unitTargetName, l.type);
                 }
                 else if (l.evtInt == "Pn.Wxao05") // Maelstrom of Chaos
                 {
@@ -2408,7 +2409,11 @@ namespace NWParsing_Plugin
                 {
                     // Normal Power case...
                     processNamesOST(l);
-                    addCombatAction(l, (int)SwingTypeEnum.PowerHealing, l.critical, l.special, l.attackType, new Dnum(-magAdj), -l.mag, l.type);
+
+                    AddCombatActionNW(
+                        (int)SwingTypeEnum.PowerHealing, l.critical, l.flank, l.special,
+                        l.unitAttackerName, l.attackType, new Dnum(-magAdj), -l.mag, -l.magBase,
+                        l.logInfo.detectedTime, l.ts, l.unitTargetName, l.type);
                 }
             }
         }
@@ -2440,7 +2445,7 @@ namespace NWParsing_Plugin
 
                 if (ActGlobals.oFormActMain.InCombat)
                 {
-                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
+                    AddCombatActionHostile(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
                 }
             }
             else if (l.evtInt == "Pn.Zh5vu")
@@ -2450,6 +2455,13 @@ namespace NWParsing_Plugin
 
                 // Ignore this as there is a damage log line to go with it.
             }
+            else if (l.evtDsp == "Pn.Snckuc1")
+            {
+                // Minor Body Injury
+                // 13:10:13:14:39:55.0::,,,,Lady Shiva,P[401878470@8454371 Lady Shiva@pombetitha],Minor Body Injury,Pn.Snckuc1,HitPointsMax,ShowPowerDisplayName,0.3,0
+
+                // Ignore this as it is not reall part of combat.
+            }
             else
             {
                 // Default
@@ -2457,7 +2469,7 @@ namespace NWParsing_Plugin
                 if (ActGlobals.oFormActMain.InCombat)
                 {
                     processNamesOST(l);
-                    addCombatAction(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
+                    AddCombatActionHostile(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
                 }
             }
         }
@@ -2508,7 +2520,7 @@ namespace NWParsing_Plugin
                 if (ActGlobals.oFormActMain.InCombat)
                 {
                     processNamesOST(l);
-                    addCombatAction(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                    AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                 }
             }
             else if (l.evtInt == "Pn.Wypyjw1") // Knight's Valor,
@@ -2517,7 +2529,7 @@ namespace NWParsing_Plugin
                 // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
 
                 processNamesST(l);
-                addCombatAction(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
             }
             else
             {
@@ -2564,7 +2576,7 @@ namespace NWParsing_Plugin
                 if (l.flags.Contains("Miss"))
                 {
                     // TODO:  Not sure I have ever seen a "miss" in a log.  This actually valid?
-                    addCombatAction(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type, magBaseAdj);
+                    AddCombatActionHostile(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type, magBaseAdj);
                 }
                 else 
                 */
@@ -2582,7 +2594,7 @@ namespace NWParsing_Plugin
                     {
                         // Generally damaging attacks have mag=0 and magBase > 0 when Immune.
                         l.logInfo.detectedType = Color.Maroon.ToArgb();
-                        addCombatAction(l, l.swingType, l.critical, special, l.attackType, Dnum.NoDamage, l.mag, l.type, l.magBase);
+                        AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, Dnum.NoDamage, l.mag, l.type, l.magBase);
                     }
                 }
                 else if (l.dodge)
@@ -2591,7 +2603,7 @@ namespace NWParsing_Plugin
                     // I have seen damaging attacks that are both Dodge and Kill in the flags.
                     // So the target dodged but still died.
                     l.logInfo.detectedType = Color.Maroon.ToArgb();
-                    addCombatAction(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                    AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                 }
                 else
                 {
@@ -2603,7 +2615,7 @@ namespace NWParsing_Plugin
                     else
                     {
                         // NOT All attacks have a magBase (anymore).
-                        addCombatAction(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                        AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                     }
                 }
             }
@@ -2655,7 +2667,7 @@ namespace NWParsing_Plugin
 
                 // No "Killing : Flank" ever.  Doesn't make sense since there is no damage in the kill tracking.
                 // And it messes up the kill counts.
-                // addCombatAction(l, l.swingType, l.critical, l.special, "Killing", Dnum.Death, l.type);
+                // AddCombatActionHostile(l, l.swingType, l.critical, l.special, "Killing", Dnum.Death, l.type);
 
                 // Use encounter names attacker and target here.  This allows filtering
                 if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
@@ -2669,7 +2681,8 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void addCombatAction(
+        // For hostile actions only.  Handles the SetEncounter().
+        private void AddCombatActionHostile(
             ParsedLine line, int swingType, bool critical, string special, string theAttackType, Dnum Damage, float realDamage, string theDamageType, float baseDamage=0)
         {
             // Use encounter names attacker and target here.  This allows filtering
@@ -2679,14 +2692,15 @@ namespace NWParsing_Plugin
                 string tempAttack = theAttackType;
                 if (line.flank && this.checkBox_flankSkill.Checked) tempAttack = theAttackType + ": Flank";
 
-                AddCombatAction(
+                AddCombatActionNW(
                     swingType, line.critical, line.flank, special, line.unitAttackerName,
                     tempAttack, Damage, realDamage, baseDamage, line.logInfo.detectedTime,
                     line.ts, line.unitTargetName, theDamageType);
             }
         }
 
-        private void AddCombatAction(
+        // Wrapper around AddCombatAction to add extra Tags that are used in the NW plugin.
+        private void AddCombatActionNW(
             int swingType, bool critical, bool flank, string special, string attacker, string theAttackType, 
             Dnum damage, float realDamage, float baseDamage,
             DateTime time, int timeSorter, string victim, string theDamageType)
