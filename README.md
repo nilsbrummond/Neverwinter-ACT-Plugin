@@ -11,6 +11,18 @@ This plugin is based on the version 0.0.5.1 plugin by Antday \<Unique\>,
 which is based on the STO plugin from Hilbert @ mancom, Pirye @ ucalegon.
 
 
+Install
+=======
+- If you don't have ACT installed then get it from [HERE] (http://advancedcombattracker.com/download.php) and install it.
+- Download the Neverwinter.cs file to your computer from [HERE](https://s3.amazonaws.com/nw-act-plugin/Neverwinter.cs).
+- In the Neverwinter game use the command "/Combatlog 1" to begin logging to a file.  
+- From ACT goto the plugins tab and "browse..." to and then enable the Neverwinter.cs plugin.  
+- Goto the option tab now.   Select the Miscellaneous category and use the "Open log" button.  Select the file "C:\Users\Public\Games\Cryptic Studios\Neverwinter\Live\Logs\GameClient\Combatlog.Log".
+
+Note: For the Neverwinter Preview server the combat log file is:
+  "C:\Users\Public\Games\Cryptic Studios\Neverwinter\Playtest\logs\GameClient\Combatlog.Log"
+
+
 State
 =====
 - Imporved GW shieldblock tracking.  See new optional columns (DmgToShield, ShieldP)
@@ -28,21 +40,9 @@ Known Issues
 ============
 - Devoted Cleric power "Flame Strike" causes falling damage that can not be tracked.  Falling damage does not specify who/what caused the fall.
 - There is currently no way to detect zone changes from the Combatlog.Log file.
-- When updating your plugin you may get a "plugin initialization failed" error.  The workaround is to remove the old plugin, restart ACT, and add the new plugin.
 - injuries are counted as outgoing damage.  (Feature?)
 - Cleric Disciple companions Sacred Flame temp HP effect is credited to the owner of the companion.
 
-
-Install
-=======
-- If you don't have ACT installed then get it from [HERE] (http://advancedcombattracker.com/download.php) and install it.
-- Download the Neverwinter.cs file to your computer from [HERE](https://s3.amazonaws.com/nw-act-plugin/Neverwinter.cs).
-- In the Neverwinter game use the command "/Combatlog 1" to begin logging to a file.  
-- From ACT goto the plugins tab and "browse..." to and then enable the Neverwinter.cs plugin.  
-- Goto the option tab now.   Select the Miscellaneous category and use the "Open log" button.  Select the file "C:\Users\Public\Games\Cryptic Studios\Neverwinter\Live\Logs\GameClient\Combatlog.Log".
-
-Note: For the Neverwinter Preview server the combat log file is:
-  "C:\Users\Public\Games\Cryptic Studios\Neverwinter\Playtest\logs\GameClient\Combatlog.Log"
 
 Non-standard Column Types
 =========================
