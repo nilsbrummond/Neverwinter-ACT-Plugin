@@ -409,6 +409,8 @@ namespace NWParsing_Plugin
             lblStatus.Text = "Neverwinter ACT plugin loaded";
         }
 
+        
+        
         private string GetIntCommas()
         {
             return ActGlobals.mainTableShowCommas ? "#,0" : "0";
@@ -1208,6 +1210,12 @@ namespace NWParsing_Plugin
             ActGlobals.oFormActMain.ValidateTableSetup();
         }
 
+        #region ImportedFromEQ2Plugin
+
+        // Needed to import this code to allow a setup from a blank state instead of the default state.
+        // Blank state setup is the only way to enable the plugin when switching from some other plugin
+        // that changed the default state.
+
         private string EncounterFormatSwitch(EncounterData Data, List<CombatantData> SelectiveAllies, string VarName, string Extra)
         {
             long damage = 0;
@@ -1699,6 +1707,8 @@ namespace NWParsing_Plugin
             }
         }
 
+        #endregion ImportedFromEQ2Plugin
+
         void oFormActMain_LogFileChanged(bool IsImport, string NewLogFileName)
         {
             curActionTime = DateTime.MinValue;
@@ -1755,7 +1765,7 @@ namespace NWParsing_Plugin
             }
 
             // Fix up the ParsedLine to be easy to process.
-            processBasic(pl);
+            ProcessBasic(pl);
 
             // Detect Player names..
             if ( ! (playersCharacterFound || isImport ) )
@@ -1771,33 +1781,33 @@ namespace NWParsing_Plugin
             }
 
             // Do the real stuff..
-            processAction(pl);
+            ProcessAction(pl);
         }
 
-        private void processNamesOST(ParsedLine line)
+        private void ProcessNamesOST(ParsedLine line)
         {
             // Owner, Source (belongs to owner), Target
             petOwnerRegistery.Register(line);
             entityOwnerRegistery.Register(line);
 
-            processOwnerSourceNames(line);
-            processTargetNames(line);
+            ProcessOwnerSourceNames(line);
+            ProcessTargetNames(line);
         }
 
-        private void processNamesST(ParsedLine line)
+        private void ProcessNamesST(ParsedLine line)
         {
             // Source, Target: All independant
-            processSourceNames(line);
-            processTargetNames(line);
+            ProcessSourceNames(line);
+            ProcessTargetNames(line);
         }
 
-        private void processNamesTargetOnly(ParsedLine line)
+        private void ProcessNamesTargetOnly(ParsedLine line)
         {
             // Target only
-            processTargetNames(line);
+            ProcessTargetNames(line);
         }
 
-        private void processBasic(ParsedLine line)
+        private void ProcessBasic(ParsedLine line)
         {
             //
             // Fix up the ParsedLine.
@@ -1905,7 +1915,7 @@ namespace NWParsing_Plugin
             line.unitTargetName = line.tgtDsp;
         }
 
-        private void processOwnerSourceNames(ParsedLine line)
+        private void ProcessOwnerSourceNames(ParsedLine line)
         {
             // Owner default:
             line.encAttackerName = line.ownDsp;
@@ -1943,7 +1953,7 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void processSourceNames(ParsedLine line)
+        private void ProcessSourceNames(ParsedLine line)
         {
             switch (line.srcEntityType)
             {
@@ -2045,7 +2055,7 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void processTargetNames(ParsedLine line)
+        private void ProcessTargetNames(ParsedLine line)
         {
             switch (line.tgtEntityType)
             {
@@ -2130,7 +2140,7 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void processActionHeals(ParsedLine l)
+        private void ProcessActionHeals(ParsedLine l)
         {
             int magAdj = (int)Math.Round(l.mag);
             int magBaseAdj = (int)Math.Round(l.magBase);
@@ -2142,7 +2152,7 @@ namespace NWParsing_Plugin
             // Heals can not start an encounter.
             if (ActGlobals.oFormActMain.InCombat)
             {
-                processNamesOST(l);
+                ProcessNamesOST(l);
 
                 // PVP Rune Heal - Needs some cleanup.  Use the player as the source since they grabbed it.
                 // Does 'Pn.R0jdk' == PVP RUNE HEAL???
@@ -2248,7 +2258,7 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void processActionShields(ParsedLine l)
+        private void ProcessActionShields(ParsedLine l)
         {
             int magAdj = (int)Math.Round(l.mag);
             int magBaseAdj = (int)Math.Round(l.magBase);
@@ -2277,7 +2287,7 @@ namespace NWParsing_Plugin
 
             l.logInfo.detectedType = l.critical ? Color.Green.ToArgb() : Color.DarkGreen.ToArgb();
 
-            processNamesOST(l);
+            ProcessNamesOST(l);
 
             // Use encounter names attacker and target here.  This allows filtering
             // Hostile action triggered.  Use SetEncounter().
@@ -2320,7 +2330,7 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void processActionCleanse(ParsedLine l)
+        private void ProcessActionCleanse(ParsedLine l)
         {
             l.logInfo.detectedType = Color.Blue.ToArgb();
 
@@ -2329,7 +2339,7 @@ namespace NWParsing_Plugin
 
             if (ActGlobals.oFormActMain.InCombat)
             {
-                processNamesOST(l);
+                ProcessNamesOST(l);
 
                 AddCombatActionNW(
                     (int)SwingTypeEnum.CureDispel, l.critical, l.flank, l.special, 
@@ -2338,7 +2348,7 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void processActionPower(ParsedLine l)
+        private void ProcessActionPower(ParsedLine l)
         {
             int magAdj = (int)Math.Round(l.mag);
             //int magBaseAdj = (int)Math.Round(l.magBase * 10);
@@ -2370,7 +2380,7 @@ namespace NWParsing_Plugin
                     // 13:07:09:21:43:30.3::Lodur,C[152 Trickster_Baitandswitch],,*,Lodur,P[201093074@7545190 Lodur@lodur42],Trigger,Pn.He9xu,Power,Immune,0,0
                     // 13:07:10:09:11:08.8::Lodur,C[178 Trickster_Baitandswitch],,*,Lodur,P[201093074@7545190 Lodur@lodur42],Trigger,Pn.He9xu,Power,Immune,0,0
 
-                    processNamesTargetOnly(l);
+                    ProcessNamesTargetOnly(l);
 
                     // Target is the source as well.
 
@@ -2390,7 +2400,7 @@ namespace NWParsing_Plugin
                     // 
                     // NOTE: Do not assume source is a pet of owner.  Source could be a pet or fake pet.  Resolve fake pet to owner.
 
-                    processNamesST(l);
+                    ProcessNamesST(l);
 
                     AddCombatActionNW(
                         (int)SwingTypeEnum.PowerHealing, l.critical, false, l.unitAttackerName, l.unitTargetName,
@@ -2408,7 +2418,7 @@ namespace NWParsing_Plugin
                 else
                 {
                     // Normal Power case...
-                    processNamesOST(l);
+                    ProcessNamesOST(l);
 
                     AddCombatActionNW(
                         (int)SwingTypeEnum.PowerHealing, l.critical, l.flank, l.special,
@@ -2418,7 +2428,7 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void processActionSPDN(ParsedLine l)
+        private void ProcessActionSPDN(ParsedLine l)
         {
             // Handle all the buff and proc buffs/debuffs
             // type: PowerRecharge, Null, Alacrity, CombatAdvantage, Lightning(Storm Spell), CritSeverity, ...
@@ -2432,7 +2442,7 @@ namespace NWParsing_Plugin
 
                 l.logInfo.detectedType = Color.DarkOliveGreen.ToArgb();
 
-                processNamesOST(l);
+                ProcessNamesOST(l);
 
                 ChaoticGrowthInfo cgi = null;
                 if (magicMissileLastHit.TryGetValue(l.tgtInt, out cgi))
@@ -2468,13 +2478,13 @@ namespace NWParsing_Plugin
 
                 if (ActGlobals.oFormActMain.InCombat)
                 {
-                    processNamesOST(l);
+                    ProcessNamesOST(l);
                     AddCombatActionHostile(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
                 }
             }
         }
 
-        private void processActionDamage(ParsedLine l)
+        private void ProcessActionDamage(ParsedLine l)
         {
             int magAdj = (int)Math.Round(l.mag);
             int magBaseAdj = (int)Math.Round(l.magBase);
@@ -2519,7 +2529,7 @@ namespace NWParsing_Plugin
                 // Falling damage does not start combat...
                 if (ActGlobals.oFormActMain.InCombat)
                 {
-                    processNamesOST(l);
+                    ProcessNamesOST(l);
                     AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                 }
             }
@@ -2528,12 +2538,12 @@ namespace NWParsing_Plugin
                 // "13:07:18:10:30:48.3::Largoevo,P[201228983@6531604 Largoevo@largoevo],Ugan the Abominable,C[1469 Mindflayer_Miniboss_Ugan],Largoevo,P[201228983@6531604 Largoevo@largoevo],Knight's Valor,Pn.Wypyjw1,Physical,,449.42,1195.48
                 // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
 
-                processNamesST(l);
+                ProcessNamesST(l);
                 AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
             }
             else
             {
-                processNamesOST(l);
+                ProcessNamesOST(l);
 
                 if ((l.evtInt == "Pn.3t6cw8") && (magAdj > 0)) // Magic Missile
                 {
@@ -2621,35 +2631,35 @@ namespace NWParsing_Plugin
             }
         }
 
-        private void processAction(ParsedLine l)
+        private void ProcessAction(ParsedLine l)
         {
             l.logInfo.detectedType = Color.Gray.ToArgb();
 
             if (l.type == "HitPoints")
             {
-                processActionHeals(l);
+                ProcessActionHeals(l);
             }
             else if (l.type == "Shield")
             {
-                processActionShields(l);
+                ProcessActionShields(l);
             }
             else if (l.type == "AttribModExpire") // Cleanse
             {
-                processActionCleanse(l);
+                ProcessActionCleanse(l);
             }
             else if (l.type == "Power")
             {
-                processActionPower(l);
+                ProcessActionPower(l);
             }
             else if (l.showPowerDisplayName)
             {
                 // Non-damaging effects.
-                processActionSPDN(l);
+                ProcessActionSPDN(l);
             }
             else
             {
                 // What is left should all be damage.
-                processActionDamage(l);
+                ProcessActionDamage(l);
             }
 
             // add action Killing
