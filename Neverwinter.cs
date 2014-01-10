@@ -20,6 +20,9 @@ using System.Net;
 
 
 /* Version History - npb
+ * 1.2.1.1 - 2014/01/10
+ *  - Minor code cleanup
+ *  - Filtered out all injuries from showing in outgoing damage.
  * 1.2.1.0 - 2013/10/13
  *  - Fix healing keeping encounters from ending.
  *  - Filtered out minor injuries from showing up.
