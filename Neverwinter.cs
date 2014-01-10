@@ -16,11 +16,11 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.2.1.0")]
+[assembly: AssemblyVersion("1.2.2.0")]
 
 
 /* Version History - npb
- * 1.2.1.1 - 2014/01/10
+ * 1.2.2.0 - 2014/01/10
  *  - Minor code cleanup
  *  - Filtered out all injuries from showing in outgoing damage.
  * 1.2.1.0 - 2013/10/13
