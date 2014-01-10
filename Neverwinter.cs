@@ -309,6 +309,41 @@ namespace NWParsing_Plugin
         private Dictionary<string, bool> playerCharacterNames = new Dictionary<string, bool>();
         private bool playersCharacterFound = false;
 
+        private static readonly Dictionary<string, bool> injuryTypes = new Dictionary<string, bool>()
+        {
+            // Minor Body Injury
+            // 13:10:13:14:39:55.0::,,,,Lady Shiva,P[401878470@8454371 Lady Shiva@pombetitha],Minor Body Injury,Pn.Snckuc1,HitPointsMax,ShowPowerDisplayName,0.3,0
+            {"Pn.Snckuc1", true},
+
+            // Minor Head Injury
+            // 13:12:26:13:02:18.0::Pelaios Babausong,P[501470872@9346055 Pelaios Babausong@defacto12232],,*,,*,Minor Head Injury,Pn.3t0w251,PowerMode,ShowPowerDisplayName,0,0
+            {"Pn.3t0w251", true},
+
+            // Minor Arm Injury
+            // 13:12:26:13:25:23.9::Dragonfly,P[501350239@7290941 Dragonfly@traenenengel],,*,,*,Minor Arm Injury,Pn.Wuki8e1,PowerMode,ShowPowerDisplayName,0,0
+            {"Pn.Wuki8e1", true},
+
+            // Minor Leg Injury
+            // 14:01:01:10:28:01.7::speedflash,P[201405998@7734429 speedflash@speedflash1911],,*,,*,Minor Leg Injury,Pn.Kxil0c1,PowerMode,ShowPowerDisplayName,0,0
+            {"Pn.Kxil0c1", true},
+
+            // Severe Body Injury
+            // 14:01:01:10:44:20.5::Drakon,P[500426320@6327016 Drakon@larrybusby],,*,,*,Severe Body Injury,Pn.Fmwcu5,PowerMode,ShowPowerDisplayName,0,0
+            {"Pn.Fmwcu5", true},
+
+            // Severe Head Injury
+            // 14:01:01:10:54:10.4::Drakon,P[500426320@6327016 Drakon@larrybusby],,*,,*,Severe Head Injury,Pn.An2r3x1,PowerMode,ShowPowerDisplayName,0,0
+            {"Pn.An2r3x1", true},
+
+            // Severe Arms Injury
+            // 14:01:01:11:56:14.8::Drakon,P[500426320@6327016 Drakon@larrybusby],,*,,*,Severe Arms Injury,Pn.3t5b87,PowerMode,ShowPowerDisplayName,0,0
+            {"Pn.3t5b87", true},
+
+            // Severe Legs Injury
+            // 14:01:01:12:03:33.6::Lodur,P[201093074@7545190 Lodur@lodur42],,*,,*,Severe Legs Injury,Pn.Va2e05,PowerMode,ShowPowerDisplayName,0,0
+            {"Pn.Va2e05", true},
+        };
+
         // Instant when the current combat action took place
         private DateTime curActionTime = DateTime.MinValue;
 
@@ -2465,11 +2500,10 @@ namespace NWParsing_Plugin
 
                 // Ignore this as there is a damage log line to go with it.
             }
-            else if (l.evtDsp == "Pn.Snckuc1")
+            else if (injuryTypes.ContainsKey(l.evtInt))
             {
-                // Minor Body Injury
-                // 13:10:13:14:39:55.0::,,,,Lady Shiva,P[401878470@8454371 Lady Shiva@pombetitha],Minor Body Injury,Pn.Snckuc1,HitPointsMax,ShowPowerDisplayName,0.3,0
-
+                // Injure...
+                
                 // Ignore this as it is not reall part of combat.
             }
             else
