@@ -16,10 +16,11 @@ using System.Net;
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
 [assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.2.2.0")]
+[assembly: AssemblyVersion("1.2.2.1")]
 
 
 /* Version History - npb
+ * 1.2.2.1 - 2014/02/12 - experimental effectiveness changes.
  * 1.2.2.0 - 2014/01/10
  *  - Minor code cleanup
  *  - Filtered out all injuries from showing in outgoing damage.
@@ -2753,6 +2754,9 @@ namespace NWParsing_Plugin
             DateTime time, int timeSorter, string victim, string theDamageType)
         {
             MasterSwing ms = new MasterSwing(swingType, critical, special, damage, time, timeSorter, theAttackType, attacker, theDamageType, victim);
+
+            // Experimental:
+            if ((0 == baseDamage) && (realDamage != 0.0)) baseDamage = realDamage;
 
             ms.Tags.Add("DamageF", realDamage);
             ms.Tags.Add("BaseDamage", baseDamage);
