@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
@@ -15,9 +15,60 @@ using System.Net;
 
 [assembly: AssemblyTitle("Neverwinter Parsing Plugin")]
 [assembly: AssemblyDescription("A basic parser that reads the combat logs in Neverwinter.")]
-[assembly: AssemblyCopyright("nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
-[assembly: AssemblyVersion("1.2.2.0")]
+[assembly: AssemblyCopyright("doublecarlos, oracleNW, jicama, dragonsbite, designedbyrng, nils.brummond@gmail.com based on: Antday <Unique> based on STO Plugin from Hilbert@mancom, Pirye@ucalegon")]
+[assembly: AssemblyVersion("1.2.8.2")]
 
+/*
+ * Version History - doublecarlos
+ * 1.2.8.2 2025-05-07
+ * - Damage from entities created by Blue Fire Eye and Tutor are correctly added to their DamageType views instead of the player's when merging is disabled.
+ */
+
+/*
+ * Version History - doublecarlos
+ * 1.2.8.1 2025-05-03
+ * - Simplify OwnerRegistery code to avoid "key already exists" exceptions on Alt-Tab.
+ */
+
+/*
+ * Version History - oracleNW
+ * 1.2.8.0 2023-07-06
+ * 
+ */
+
+/* Version History - jicama (@valyana in NW)
+ * 1.2.7.0 - 6-11-2020
+ * - Greatly improve shield tracking for mod 17/18.  Complicated because Oathkeeper and tank shields look identical in the logs, but behave differently.
+ * - Fix Watcher boss parsing.
+ * - Hopefully fix exceptions on alt-tab.
+ * No version bump - 5-22-2019
+ * - Improve shield tracking for mod 16.
+ * - Add deflect tracking.
+ * - Reduce UNKNOWNs for pets.
+ */
+
+/* Version History - dragonsbite
+ * 1.2.6.0 - 2-11-2018
+ *  - Changed processing order to fix some things. Removed the previous Wheel of Elements : Earth fix as this fix fixes it and as below and other stuff.
+ *  - Fixed Cleanse to show the correct amount of inc Cleanse and out Cleanse
+ *  - Fixed Fall Damage to not start combat
+ *  - Fixed Spike Trap, Poison Spike Trap, and Arrow Trap to not start combat.
+ * 1.2.5.0 - 2-9-2018
+ *   -Fixed Falling Damage to not start combat. 
+ *   -Fixed Wheel of Elements : Earth to not start combat.
+ * 1.2.4.0 - 2-9-2018
+ *  - Fixed Pet Damage "In and "Out" and "Deaths". This affects your damage in and out by less then 0.05% and your deaths.
+ *  - Fixed Cure/Dispel In and Out to only show "Cleanse" and ignored others that did NOT show a cleanse and instead just showed messages of expiration.
+ *  - Fixed "Start" and "Stop" of combat to now start and stop via actual damage as it properly should. Encounter times are decreased as a result. 
+ *  - Consequently dps increases as it should. The amount of encounters increases as there is more time between encounters now. 
+ */
+
+/* Version History - designedbyrng
+ * 1.2.3.0 - 2-8-2018
+ *  - Non-damaging procs are in their own category "Non-Damage (Out)" and "Non-Damage (Inc)"
+ *  - Fixed Slayer marks now are parsed properly
+ *  - Several stats have been renamed to fit neverwinter better 
+ */
 
 /* Version History - npb
  * 1.2.2.0 - 2014/01/10
@@ -69,7 +120,7 @@ using System.Net;
  *   - cleanup some things from orig STO Parser
  * 0.0.1.0 - 2013/04/05
  *   - initial alpha version
-*/
+ */
 
 
 namespace NWParsing_Plugin
@@ -304,13 +355,25 @@ namespace NWParsing_Plugin
         private PetOwnerRegistery petOwnerRegistery = new PetOwnerRegistery();
         private EntityOwnerRegistery entityOwnerRegistery = new EntityOwnerRegistery();
 
-        private UnmatchedShieldLines unmatchedShieldLines = new UnmatchedShieldLines();
+        private UnmatchedShieldLines unmatchedShieldLines = null;
 
         // For tracking source of Chaotic Growth heals.
         private Dictionary<string, ChaoticGrowthInfo> magicMissileLastHit = new Dictionary<string, ChaoticGrowthInfo>();
 
         private Dictionary<string, bool> playerCharacterNames = new Dictionary<string, bool>();
         private bool playersCharacterFound = false;
+
+        // FIXME changing some of these Inc/Out___Name strings breaks columns in Combatant list in Encounter view for some reason
+        private const string IncDamageName = "Damage (Inc)";
+        private const string OutDamageName = "Damage (Out)";
+        private const string IncHealedName = "Heals (Inc)";
+        private const string OutHealedName = "Heals (Out)";
+        private const string IncPowerRName = "Power Replenish (Inc)";
+        private const string OutPowerRName = "Power Replenish (Out)";
+        private const string IncSkillsName = "Non-Damage (Inc)";
+        private const string OutSkillsName = "Non-Damage (Out)";
+        private const string IncCleanseName = "Cure/Dispel (Inc)";
+        private const string OutCleanseName = "Cure/Dispel (Out)";
 
         private static readonly Dictionary<string, bool> injuryTypes = new Dictionary<string, bool>()
         {
@@ -359,6 +422,12 @@ namespace NWParsing_Plugin
 
         private int parsedLineCount = 0;
         private int errorLineCount = 0;
+
+        public static readonly string[] companionEntityPowers = {
+            "Pn.Prookc1", // "Hexed earth" from Blue Fire Eye
+            "Pn.Bdzbls", // "Instructional Aid" from Tutor
+            "Pn.3kzn9w1", // "Instructional Aid" from Tutor
+        };
 
         public void InitPlugin(TabPage pluginScreenSpace, Label pluginStatusText)
         {
@@ -445,10 +514,12 @@ namespace NWParsing_Plugin
             // Set status text to successfully loaded
             lblStatus = pluginStatusText;
             lblStatus.Text = "Neverwinter ACT plugin loaded";
+
+            unmatchedShieldLines = new UnmatchedShieldLines(this);
         }
 
-        
-        
+
+
         private string GetIntCommas()
         {
             return ActGlobals.mainTableShowCommas ? "#,0" : "0";
@@ -502,6 +573,51 @@ namespace NWParsing_Plugin
             }
 
             return leftFlank.CompareTo(rightFlank);
+        }
+
+        private string GetCellDataDeflect(MasterSwing Data)
+        {
+            object val;
+            bool Deflect = false;
+
+            if (Data.Tags.TryGetValue("Deflect", out val))
+            {
+                Deflect = (bool)val;
+            }
+
+            return Deflect.ToString();
+        }
+
+        private string GetSqlDataDeflect(MasterSwing Data)
+        {
+            object val;
+            bool Deflect = false;
+
+            if (Data.Tags.TryGetValue("Deflect", out val))
+            {
+                Deflect = (bool)val;
+            }
+
+            return Deflect.ToString(usCulture)[0].ToString();
+        }
+
+        private int MasterSwingCompareDeflect(MasterSwing Left, MasterSwing Right)
+        {
+            object val;
+            bool leftDeflect = false;
+            bool rightDeflect = false;
+
+            if (Left.Tags.TryGetValue("Deflect", out val))
+            {
+                leftDeflect = (bool)val;
+            }
+
+            if (Right.Tags.TryGetValue("Deflect", out val))
+            {
+                rightDeflect = (bool)val;
+            }
+
+            return leftDeflect.CompareTo(rightDeflect);
         }
 
         private string GetCellDataBaseDamage(MasterSwing Data)
@@ -676,6 +792,45 @@ namespace NWParsing_Plugin
             return GetShieldPValue(Left).CompareTo(GetShieldPValue(Right));
         }
 
+        private int GetDTDeflectValue(DamageTypeData Data)
+        {
+            if (Data.Items.Count == 0) return 0;
+
+            AttackType at = Data.Items["All"];
+            return GetAADeflectValue(at);
+        }
+
+        private string GetCellDataDeflectHits(DamageTypeData Data)
+        {
+            return GetDTDeflectValue(Data).ToString(GetIntCommas());
+        }
+
+        private string GetSqlDataDeflectHits(DamageTypeData Data)
+        {
+            return GetDTDeflectValue(Data).ToString();
+        }
+
+        private double GetDTDeflectPrecValue(DamageTypeData Data)
+        {
+            if (Data.Hits == 0) return 0;
+
+            double fv = (double)GetDTDeflectValue(Data);
+            fv *= 100.0;
+            fv /= Data.Hits;
+
+            return fv;
+        }
+
+        private string GetCellDataDeflectPrec(DamageTypeData Data)
+        {
+            return GetDTDeflectPrecValue(Data).ToString("0'%");
+        }
+
+        private string GetSqlDataDeflectPrec(DamageTypeData Data)
+        {
+            return GetDTDeflectPrecValue(Data).ToString("0'%");
+        }
+
         private int GetDTFlankValue(DamageTypeData Data)
         {
             if (Data.Items.Count == 0) return 0;
@@ -709,7 +864,7 @@ namespace NWParsing_Plugin
         {
             return GetDTFlankPrecValue(Data).ToString("0'%");
         }
-        
+
         private string GetSqlDataFlankPrec(DamageTypeData Data)
         {
             return GetDTFlankPrecValue(Data).ToString("0'%");
@@ -751,12 +906,12 @@ namespace NWParsing_Plugin
 
             int count = Data.Items.Count;
 
-            for (int i=0; i<count; i++)
+            for (int i = 0; i < count; i++)
             {
                 MasterSwing ms = Data.Items[i];
 
                 object fv;
-                if ( ( ms.Damage > 0 ) && (ms.Tags.TryGetValue("Flank", out fv) ) )
+                if ((ms.Damage > 0) && (ms.Tags.TryGetValue("Flank", out fv)))
                 {
                     bool flank = (bool)fv;
                     if (flank) flankCount++;
@@ -769,7 +924,7 @@ namespace NWParsing_Plugin
             return flankCount;
         }
 
-        private string GetCellDataFlankHits(AttackType Data) 
+        private string GetCellDataFlankHits(AttackType Data)
         {
             return GetAAFlankValue(Data).ToString(GetIntCommas());
         }
@@ -786,7 +941,7 @@ namespace NWParsing_Plugin
 
         private string GetCellDataFlankPrec(AttackType Data)
         {
-            double flankPrec = (double) GetAAFlankValue(Data);
+            double flankPrec = (double)GetAAFlankValue(Data);
             flankPrec *= 100.0;
             flankPrec /= (double)Data.Hits;
 
@@ -813,6 +968,86 @@ namespace NWParsing_Plugin
             return flankPrecLeft.CompareTo(flankPrecRight);
         }
 
+        private int GetAADeflectValue(AttackType Data)
+        {
+            int DeflectCount = 0;
+
+            if (Data.Items.Count == 0) return 0;
+
+            if (Data.Tags.ContainsKey("DeflectPrecCacheCount"))
+            {
+                int DeflectPrecCacheCount = (int)Data.Tags["DeflectPrecCacheCount"];
+                if (DeflectPrecCacheCount == Data.Items.Count)
+                {
+                    DeflectCount = (int)Data.Tags["DeflectPrecCacheValue"];
+                    return DeflectCount;
+                }
+            }
+
+            int count = Data.Items.Count;
+
+            for (int i = 0; i < count; i++)
+            {
+                MasterSwing ms = Data.Items[i];
+
+                object fv;
+                if ((ms.Damage > 0) && (ms.Tags.TryGetValue("Deflect", out fv)))
+                {
+                    bool Deflect = (bool)fv;
+                    if (Deflect) DeflectCount++;
+                }
+            }
+
+            Data.Tags["DeflectPrecCacheCount"] = count;
+            Data.Tags["DeflectPrecCacheValue"] = DeflectCount;
+
+            return DeflectCount;
+        }
+
+        private string GetCellDataDeflectHits(AttackType Data)
+        {
+            return GetAADeflectValue(Data).ToString(GetIntCommas());
+        }
+
+        private string GetSqlDataDeflectHits(AttackType Data)
+        {
+            return GetAADeflectValue(Data).ToString();
+        }
+
+        private int AttackTypeCompareDeflectHits(AttackType Left, AttackType Right)
+        {
+            return GetAADeflectValue(Left).CompareTo(GetAADeflectValue(Right));
+        }
+
+        private string GetCellDataDeflectPrec(AttackType Data)
+        {
+            double DeflectPrec = (double)GetAADeflectValue(Data);
+            DeflectPrec *= 100.0;
+            DeflectPrec /= (double)Data.Hits;
+
+            return DeflectPrec.ToString("0'%");
+        }
+
+        private string GetSqlDataDeflectPrec(AttackType Data)
+        {
+            double DeflectPrec = (double)GetAADeflectValue(Data);
+            DeflectPrec *= 100.0;
+            DeflectPrec /= (double)Data.Hits;
+
+            return DeflectPrec.ToString("0'%");
+        }
+
+        private int AttackTypeCompareDeflectPrec(AttackType Left, AttackType Right)
+        {
+            double DeflectPrecLeft = (double)GetAADeflectValue(Left);
+            DeflectPrecLeft /= (double)Left.Items.Count;
+
+            double DeflectPrecRight = (double)GetAADeflectValue(Right);
+            DeflectPrecRight /= (double)Right.Items.Count;
+
+            return DeflectPrecLeft.CompareTo(DeflectPrecRight);
+        }
+
         private double GetAAEffectiveness(AttackType Data)
         {
             double dmgTotal = 0;
@@ -831,10 +1066,10 @@ namespace NWParsing_Plugin
                 }
             }
 
-            
+
             int count = Data.Items.Count;
 
-            for (int i=0; i<count; i++)
+            for (int i = 0; i < count; i++)
             {
                 MasterSwing ms = Data.Items[i];
 
@@ -856,7 +1091,7 @@ namespace NWParsing_Plugin
                 }
             }
 
-            effectiveness = (double) dmgTotal / (double) baseDmgTotal;
+            effectiveness = (double)dmgTotal / (double)baseDmgTotal;
 
             Data.Tags["effectivenessCacheCount"] = count;
             Data.Tags["effectivenessCacheValue"] = effectiveness;
@@ -881,66 +1116,81 @@ namespace NWParsing_Plugin
 
         private string GetCellDataFlankDamPrec(CombatantData Data)
         {
-            return GetCellDataFlankPrec(Data.Items["Outgoing Damage"]);
+            return GetCellDataFlankPrec(Data.Items[OutDamageName]);
         }
 
         private string GetSqlDataFlankDamPrec(CombatantData Data)
         {
-            return GetSqlDataFlankPrec(Data.Items["Outgoing Damage"]);
+            return GetSqlDataFlankPrec(Data.Items[OutDamageName]);
         }
 
         private int CDCompareFlankDamPrec(CombatantData Left, CombatantData Right)
         {
-            return GetDTFlankPrecValue(Left.Items["Outgoing Damage"]).CompareTo(GetDTFlankPrecValue(Right.Items["Outgoing Damage"]));
+            return GetDTFlankPrecValue(Left.Items[OutDamageName]).CompareTo(GetDTFlankPrecValue(Right.Items[OutDamageName]));
+        }
+
+        private string GetCellDataDeflectDamPrec(CombatantData Data)
+        {
+            return GetCellDataDeflectPrec(Data.Items[OutDamageName]);
+        }
+
+        private string GetSqlDataDeflectDamPrec(CombatantData Data)
+        {
+            return GetSqlDataDeflectPrec(Data.Items[OutDamageName]);
+        }
+
+        private int CDCompareDeflectDamPrec(CombatantData Left, CombatantData Right)
+        {
+            return GetDTDeflectPrecValue(Left.Items[OutDamageName]).CompareTo(GetDTDeflectPrecValue(Right.Items[OutDamageName]));
         }
 
         private string GetCellDataDmgEffectPrec(CombatantData Data)
         {
-            return GetCellDataEffectiveness(Data.Items["Outgoing Damage"]);
+            return GetCellDataEffectiveness(Data.Items[OutDamageName]);
         }
 
         private string GetSqlDataDmgEffectPrec(CombatantData Data)
         {
-            return GetSqlDataEffectiveness(Data.Items["Outgoing Damage"]);
+            return GetSqlDataEffectiveness(Data.Items[OutDamageName]);
         }
 
         private int CDCompareDmgEffectPrec(CombatantData Left, CombatantData Right)
         {
-            return GetDTEffectivenessValue(Left.Items["Outgoing Damage"]).CompareTo(GetDTEffectivenessValue(Right.Items["Outgoing Damage"]));
+            return GetDTEffectivenessValue(Left.Items[OutDamageName]).CompareTo(GetDTEffectivenessValue(Right.Items[OutDamageName]));
         }
 
         private string GetCellDataDmgTakenEffectPrec(CombatantData Data)
         {
-            return GetCellDataEffectiveness(Data.Items["Incoming Damage"]);
+            return GetCellDataEffectiveness(Data.Items[IncDamageName]);
         }
 
         private string GetSqlDataDmgTakenEffectPrec(CombatantData Data)
         {
-            return GetSqlDataEffectiveness(Data.Items["Incoming Damage"]);
+            return GetSqlDataEffectiveness(Data.Items[IncDamageName]);
         }
 
         private int CDCompareDmgTakenEffectPrec(CombatantData Left, CombatantData Right)
         {
-            return GetDTEffectivenessValue(Left.Items["Incoming Damage"]).CompareTo(GetDTEffectivenessValue(Right.Items["Incoming Damage"]));
+            return GetDTEffectivenessValue(Left.Items[IncDamageName]).CompareTo(GetDTEffectivenessValue(Right.Items[IncDamageName]));
         }
 
 
-        private void FixupCombatDataStructures()
+        private void FixupEncounterData()
         {
-            // - Remove data types that do not apply to Neverwinter combat logs.
-            // - Add new data types just for Neverwinter.
-
             EncounterData.ColumnDefs.Clear();
             EncounterData.ColumnDefs.Add("EncId", new EncounterData.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.EncId; }));
             EncounterData.ColumnDefs.Add("Title", new EncounterData.ColumnDef("Title", true, "VARCHAR(64)", "Title", (Data) => { return Data.Title; }, (Data) => { return Data.Title; }));
-            EncounterData.ColumnDefs.Add("StartTime", new EncounterData.ColumnDef("StartTime", true, "TIMESTAMP", "StartTime", (Data) => { return Data.StartTime == DateTime.MaxValue ? "--:--:--" : String.Format("{0} {1}", Data.StartTime.ToShortDateString(), Data.StartTime.ToLongTimeString()); }, (Data) => { return Data.StartTime == DateTime.MaxValue ? "0000-00-00 00:00:00" : Data.StartTime.ToString("u").TrimEnd(new char[] { 'Z' }); }));
-            EncounterData.ColumnDefs.Add("EndTime", new EncounterData.ColumnDef("EndTime", true, "TIMESTAMP", "EndTime", (Data) => { return Data.EndTime == DateTime.MinValue ? "--:--:--" : Data.EndTime.ToString("T"); }, (Data) => { return Data.EndTime == DateTime.MinValue ? "0000-00-00 00:00:00" : Data.EndTime.ToString("u").TrimEnd(new char[] { 'Z' }); }));
+            EncounterData.ColumnDefs.Add("StartTime", new EncounterData.ColumnDef("StartTime", true, "TIMESTAMP", "StartTime",
+                    (Data) => { return Data.StartTime == DateTime.MaxValue ? "--:--:--" : Data.StartTime.ToString("G"); },
+                    (Data) => { return Data.StartTime == DateTime.MaxValue ? "0000-00-00 00:00:00" : Data.StartTime.ToString("u").TrimEnd(new char[] { 'Z' }); }));
+            EncounterData.ColumnDefs.Add("EndTime", new EncounterData.ColumnDef("EndTime", true, "TIMESTAMP", "EndTime",
+                    (Data) => { return Data.EndTime == DateTime.MinValue ? "--:--:--" : Data.EndTime.ToString("G"); },
+                    (Data) => { return Data.EndTime == DateTime.MinValue ? "0000-00-00 00:00:00" : Data.EndTime.ToString("u").TrimEnd(new char[] { 'Z' }); }));
             EncounterData.ColumnDefs.Add("Duration", new EncounterData.ColumnDef("Duration", true, "INT", "Duration", (Data) => { return Data.DurationS; }, (Data) => { return Data.Duration.TotalSeconds.ToString("0"); }));
-            EncounterData.ColumnDefs.Add("Damage", new EncounterData.ColumnDef("Damage", true, "BIGINT", "Damage", (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); }, (Data) => { return Data.Damage.ToString(); }));
-            EncounterData.ColumnDefs.Add("EncDPS", new EncounterData.ColumnDef("EncDPS", true, "DOUBLE", "EncDPS", (Data) => { return Data.DPS.ToString(GetFloatCommas()); }, (Data) => { return Data.DPS.ToString(usCulture); }));
-            EncounterData.ColumnDefs.Add("Zone", new EncounterData.ColumnDef("Zone", false, "VARCHAR(64)", "Zone", (Data) => { return Data.ZoneName; }, (Data) => { return Data.ZoneName; }));
-            EncounterData.ColumnDefs.Add("Kills", new EncounterData.ColumnDef("Kills", true, "INT", "Kills", (Data) => { return Data.AlliedKills.ToString(GetIntCommas()); }, (Data) => { return Data.AlliedKills.ToString(); }));
-            EncounterData.ColumnDefs.Add("Deaths", new EncounterData.ColumnDef("Deaths", true, "INT", "Deaths", (Data) => { return Data.AlliedDeaths.ToString(); }, (Data) => { return Data.AlliedDeaths.ToString(); }));
+            EncounterData.ColumnDefs.Add("Damage", new EncounterData.ColumnDef("Damage", true, "BIGINT", "Damage", (Data) => { return (Data.Damage / 10).ToString(GetIntCommas()); }, (Data) => { return Data.Damage.ToString(); })); // TODO does not work as expected
+            EncounterData.ColumnDefs.Add("EncDPS", new EncounterData.ColumnDef("EncDPS", true, "DOUBLE", "EncDPS", (Data) => { return Data.DPS.ToString(GetFloatCommas()); }, (Data) => { return Data.DPS.ToString(usCulture); })); // TODO does not work as expected
+            EncounterData.ColumnDefs.Add("Kills", new EncounterData.ColumnDef("Kills", true, "INT", "Kills", (Data) => { return Data.AlliedKills.ToString(GetIntCommas()); }, (Data) => { return Data.AlliedKills.ToString(); })); // TODO does not work as expected
+            EncounterData.ColumnDefs.Add("Deaths", new EncounterData.ColumnDef("Deaths", true, "INT", "Deaths", (Data) => { return Data.AlliedDeaths.ToString(); }, (Data) => { return Data.AlliedDeaths.ToString(); })); // TODO does not work as expected
 
             EncounterData.ExportVariables.Clear();
             EncounterData.ExportVariables.Add("n", new EncounterData.TextExportFormatter("n", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-newline"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-newline"].DisplayedText, (Data, SelectiveAllies, Extra) => { return "\n"; }));
@@ -978,53 +1228,125 @@ namespace NWParsing_Plugin
             EncounterData.ExportVariables.Add("cures", new EncounterData.TextExportFormatter("cures", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-cures"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-cures"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "cures", Extra); }));
             EncounterData.ExportVariables.Add("maxheal", new EncounterData.TextExportFormatter("maxheal", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-maxheal"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-maxheal"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "maxheal", Extra); }));
             EncounterData.ExportVariables.Add("MAXHEAL", new EncounterData.TextExportFormatter("MAXHEAL", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-MAXHEAL"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-MAXHEAL"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "MAXHEAL", Extra); }));
-            //EncounterData.ExportVariables.Add("maxhealward", new EncounterData.TextExportFormatter("maxhealward", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-maxhealward"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-maxhealward"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "maxhealward", Extra); }));
-            //EncounterData.ExportVariables.Add("MAXHEALWARD", new EncounterData.TextExportFormatter("MAXHEALWARD", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-MAXHEALWARD"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-MAXHEALWARD"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "MAXHEALWARD", Extra); }));
             EncounterData.ExportVariables.Add("damagetaken", new EncounterData.TextExportFormatter("damagetaken", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-damagetaken"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-damagetaken"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "damagetaken", Extra); }));
             EncounterData.ExportVariables.Add("healstaken", new EncounterData.TextExportFormatter("healstaken", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-healstaken"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-healstaken"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "healstaken", Extra); }));
-            //EncounterData.ExportVariables.Add("powerdrain", new EncounterData.TextExportFormatter("powerdrain", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-powerdrain"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-powerdrain"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "powerdrain", Extra); }));
             EncounterData.ExportVariables.Add("powerheal", new EncounterData.TextExportFormatter("powerheal", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-powerheal"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-powerheal"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "powerheal", Extra); }));
             EncounterData.ExportVariables.Add("kills", new EncounterData.TextExportFormatter("kills", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-kills"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-kills"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "kills", Extra); }));
             EncounterData.ExportVariables.Add("deaths", new EncounterData.TextExportFormatter("deaths", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-deaths"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-deaths"].DisplayedText, (Data, SelectiveAllies, Extra) => { return EncounterFormatSwitch(Data, SelectiveAllies, "deaths", Extra); }));
-
-
+        }
+        private void FixupCombatantData()
+        {
             CombatantData.ColumnDefs.Clear();
-            CombatantData.ColumnDefs.Add("EncId", new CombatantData.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.Parent.EncId; }, (Left, Right) => { return 0; }));
-            CombatantData.ColumnDefs.Add("Ally", new CombatantData.ColumnDef("Ally", false, "CHAR(1)", "Ally", (Data) => { return Data.Parent.GetAllies().Contains(Data).ToString(); }, (Data) => { return Data.Parent.GetAllies().Contains(Data) ? "T" : "F"; }, (Left, Right) => { return Left.Parent.GetAllies().Contains(Left).CompareTo(Right.Parent.GetAllies().Contains(Right)); }));
-            CombatantData.ColumnDefs.Add("Name", new CombatantData.ColumnDef("Name", true, "VARCHAR(64)", "Name", (Data) => { return Data.Name; }, (Data) => { return Data.Name; }, (Left, Right) => { return Left.Name.CompareTo(Right.Name); }));
-            CombatantData.ColumnDefs.Add("StartTime", new CombatantData.ColumnDef("StartTime", true, "TIMESTAMP", "StartTime", (Data) => { return Data.StartTime == DateTime.MaxValue ? "--:--:--" : Data.StartTime.ToString("T"); }, (Data) => { return Data.StartTime == DateTime.MaxValue ? "0000-00-00 00:00:00" : Data.StartTime.ToString("u").TrimEnd(new char[] { 'Z' }); }, (Left, Right) => { return Left.StartTime.CompareTo(Right.StartTime); }));
-            CombatantData.ColumnDefs.Add("EndTime", new CombatantData.ColumnDef("EndTime", false, "TIMESTAMP", "EndTime", (Data) => { return Data.EndTime == DateTime.MinValue ? "--:--:--" : Data.StartTime.ToString("T"); }, (Data) => { return Data.EndTime == DateTime.MinValue ? "0000-00-00 00:00:00" : Data.EndTime.ToString("u").TrimEnd(new char[] { 'Z' }); }, (Left, Right) => { return Left.EndTime.CompareTo(Right.EndTime); }));
-            CombatantData.ColumnDefs.Add("Duration", new CombatantData.ColumnDef("Duration", true, "INT", "Duration", (Data) => { return Data.DurationS; }, (Data) => { return Data.Duration.TotalSeconds.ToString("0"); }, (Left, Right) => { return Left.Duration.CompareTo(Right.Duration); }));
-            CombatantData.ColumnDefs.Add("Damage", new CombatantData.ColumnDef("Damage", true, "BIGINT", "Damage", (Data) => { return Data.Damage.ToString(GetIntCommas()); }, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
-            CombatantData.ColumnDefs.Add("Damage%", new CombatantData.ColumnDef("Damage%", true, "VARCHAR(4)", "DamagePerc", (Data) => { return Data.DamagePercent; }, (Data) => { return Data.DamagePercent; }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
-            CombatantData.ColumnDefs.Add("Kills", new CombatantData.ColumnDef("Kills", false, "INT", "Kills", (Data) => { return Data.Kills.ToString(GetIntCommas()); }, (Data) => { return Data.Kills.ToString(); }, (Left, Right) => { return Left.Kills.CompareTo(Right.Kills); }));
-            CombatantData.ColumnDefs.Add("Healed", new CombatantData.ColumnDef("Healed", false, "BIGINT", "Healed", (Data) => { return Data.Healed.ToString(GetIntCommas()); }, (Data) => { return Data.Healed.ToString(); }, (Left, Right) => { return Left.Healed.CompareTo(Right.Healed); }));
-            CombatantData.ColumnDefs.Add("Healed%", new CombatantData.ColumnDef("Healed%", false, "VARCHAR(4)", "HealedPerc", (Data) => { return Data.HealedPercent; }, (Data) => { return Data.HealedPercent; }, (Left, Right) => { return Left.Healed.CompareTo(Right.Healed); }));
-            CombatantData.ColumnDefs.Add("CritHeals", new CombatantData.ColumnDef("CritHeals", false, "INT", "CritHeals", (Data) => { return Data.CritHeals.ToString(GetIntCommas()); }, (Data) => { return Data.CritHeals.ToString(); }, (Left, Right) => { return Left.CritHeals.CompareTo(Right.CritHeals); }));
-            CombatantData.ColumnDefs.Add("Heals", new CombatantData.ColumnDef("Heals", false, "INT", "Heals", (Data) => { return Data.Heals.ToString(GetIntCommas()); }, (Data) => { return Data.Heals.ToString(); }, (Left, Right) => { return Left.Heals.CompareTo(Right.Heals); }));
-            CombatantData.ColumnDefs.Add("Cures", new CombatantData.ColumnDef("Cures", false, "INT", "CureDispels", (Data) => { return Data.CureDispels.ToString(GetIntCommas()); }, (Data) => { return Data.CureDispels.ToString(); }, (Left, Right) => { return Left.CureDispels.CompareTo(Right.CureDispels); }));
-            //CombatantData.ColumnDefs.Add("PowerDrain", new CombatantData.ColumnDef("PowerDrain", true, "BIGINT", "PowerDrain", (Data) => { return Data.PowerDamage.ToString(GetIntCommas()); }, (Data) => { return Data.PowerDamage.ToString(); }, (Left, Right) => { return Left.PowerDamage.CompareTo(Right.PowerDamage); }));
-            CombatantData.ColumnDefs.Add("PowerReplenish", new CombatantData.ColumnDef("PowerReplenish", false, "BIGINT", "PowerReplenish", (Data) => { return Data.PowerReplenish.ToString(GetIntCommas()); }, (Data) => { return Data.PowerReplenish.ToString(); }, (Left, Right) => { return Left.PowerReplenish.CompareTo(Right.PowerReplenish); }));
-            CombatantData.ColumnDefs.Add("DPS", new CombatantData.ColumnDef("DPS", false, "DOUBLE", "DPS", (Data) => { return Data.DPS.ToString(GetFloatCommas()); }, (Data) => { return Data.DPS.ToString(usCulture); }, (Left, Right) => { return Left.DPS.CompareTo(Right.DPS); }));
-            CombatantData.ColumnDefs.Add("EncDPS", new CombatantData.ColumnDef("EncDPS", true, "DOUBLE", "EncDPS", (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); }, (Data) => { return Data.EncDPS.ToString(usCulture); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
-            CombatantData.ColumnDefs.Add("EncHPS", new CombatantData.ColumnDef("EncHPS", true, "DOUBLE", "EncHPS", (Data) => { return Data.EncHPS.ToString(GetFloatCommas()); }, (Data) => { return Data.EncHPS.ToString(usCulture); }, (Left, Right) => { return Left.Healed.CompareTo(Right.Healed); }));
-            CombatantData.ColumnDefs.Add("Hits", new CombatantData.ColumnDef("Hits", false, "INT", "Hits", (Data) => { return Data.Hits.ToString(GetIntCommas()); }, (Data) => { return Data.Hits.ToString(); }, (Left, Right) => { return Left.Hits.CompareTo(Right.Hits); }));
-            CombatantData.ColumnDefs.Add("CritHits", new CombatantData.ColumnDef("CritHits", false, "INT", "CritHits", (Data) => { return Data.CritHits.ToString(GetIntCommas()); }, (Data) => { return Data.CritHits.ToString(); }, (Left, Right) => { return Left.CritHits.CompareTo(Right.CritHits); }));
-            CombatantData.ColumnDefs.Add("Avoids", new CombatantData.ColumnDef("Avoids", false, "INT", "Blocked", (Data) => { return Data.Blocked.ToString(GetIntCommas()); }, (Data) => { return Data.Blocked.ToString(); }, (Left, Right) => { return Left.Blocked.CompareTo(Right.Blocked); }));
-            CombatantData.ColumnDefs.Add("Misses", new CombatantData.ColumnDef("Misses", false, "INT", "Misses", (Data) => { return Data.Misses.ToString(GetIntCommas()); }, (Data) => { return Data.Misses.ToString(); }, (Left, Right) => { return Left.Misses.CompareTo(Right.Misses); }));
-            CombatantData.ColumnDefs.Add("Swings", new CombatantData.ColumnDef("Swings", false, "INT", "Swings", (Data) => { return Data.Swings.ToString(GetIntCommas()); }, (Data) => { return Data.Swings.ToString(); }, (Left, Right) => { return Left.Swings.CompareTo(Right.Swings); }));
-            CombatantData.ColumnDefs.Add("HealingTaken", new CombatantData.ColumnDef("HealingTaken", false, "BIGINT", "HealsTaken", (Data) => { return Data.HealsTaken.ToString(GetIntCommas()); }, (Data) => { return Data.HealsTaken.ToString(); }, (Left, Right) => { return Left.HealsTaken.CompareTo(Right.HealsTaken); }));
-            CombatantData.ColumnDefs.Add("DamageTaken", new CombatantData.ColumnDef("DamageTaken", true, "BIGINT", "DamageTaken", (Data) => { return Data.DamageTaken.ToString(GetIntCommas()); }, (Data) => { return Data.DamageTaken.ToString(); }, (Left, Right) => { return Left.DamageTaken.CompareTo(Right.DamageTaken); }));
-            CombatantData.ColumnDefs.Add("Deaths", new CombatantData.ColumnDef("Deaths", true, "INT", "Deaths", (Data) => { return Data.Deaths.ToString(GetIntCommas()); }, (Data) => { return Data.Deaths.ToString(); }, (Left, Right) => { return Left.Deaths.CompareTo(Right.Deaths); }));
-            CombatantData.ColumnDefs.Add("ToHit%", new CombatantData.ColumnDef("ToHit%", false, "FLOAT", "ToHit", (Data) => { return Data.ToHit.ToString(GetFloatCommas()); }, (Data) => { return Data.ToHit.ToString(usCulture); }, (Left, Right) => { return Left.ToHit.CompareTo(Right.ToHit); }));
-            CombatantData.ColumnDefs.Add("FCritHit%", new CombatantData.ColumnDef("FCritHit%", true, "VARCHAR(8)", "FCritHitPerc", (Data) => { return GetFilteredCritChance(Data).ToString("0'%"); }, (Data) => { return GetFilteredCritChance(Data).ToString("0'%"); }, (Left, Right) => { return GetFilteredCritChance(Left).CompareTo(GetFilteredCritChance(Right)); }));
-            CombatantData.ColumnDefs.Add("CritDam%", new CombatantData.ColumnDef("CritDam%", false, "VARCHAR(8)", "CritDamPerc", (Data) => { return Data.CritDamPerc.ToString("0'%"); }, (Data) => { return Data.CritDamPerc.ToString("0'%"); }, (Left, Right) => { return Left.CritDamPerc.CompareTo(Right.CritDamPerc); }));
-            CombatantData.ColumnDefs.Add("CritHeal%", new CombatantData.ColumnDef("CritHeal%", false, "VARCHAR(8)", "CritHealPerc", (Data) => { return Data.CritHealPerc.ToString("0'%"); }, (Data) => { return Data.CritHealPerc.ToString("0'%"); }, (Left, Right) => { return Left.CritHealPerc.CompareTo(Right.CritHealPerc); }));
-            //CombatantData.ColumnDefs.Add("Threat +/-", new CombatantData.ColumnDef("Threat +/-", false, "VARCHAR(32)", "ThreatStr", (Data) => { return Data.GetThreatStr("Threat (Out)"); }, (Data) => { return Data.GetThreatStr("Threat (Out)"); }, (Left, Right) => { return Left.GetThreatDelta("Threat (Out)").CompareTo(Right.GetThreatDelta("Threat (Out)")); }));
-            //CombatantData.ColumnDefs.Add("ThreatDelta", new CombatantData.ColumnDef("ThreatDelta", false, "INT", "ThreatDelta", (Data) => { return Data.GetThreatDelta("Threat (Out)").ToString(GetIntCommas()); }, (Data) => { return Data.GetThreatDelta("Threat (Out)").ToString(); }, (Left, Right) => { return Left.GetThreatDelta("Threat (Out)").CompareTo(Right.GetThreatDelta("Threat (Out)")); }));
-            
-            CombatantData.ColumnDefs.Add("FlankDam%",
+            CombatantData.ColumnDefs.Add("EncId", new CombatantData.ColumnDef("EncId", false, "CHAR(8)", "EncId",
+                    (Data) => { return string.Empty; },
+                    (Data) => { return Data.Parent.EncId; },
+                    (Left, Right) => { return 0; })); // TODO shows nothing
+            CombatantData.ColumnDefs.Add("Ally", new CombatantData.ColumnDef("Ally", false, "CHAR(1)", "Ally",
+                    (Data) => { return Data.Parent.GetAllies().Contains(Data).ToString(); },
+                    (Data) => { return Data.Parent.GetAllies().Contains(Data) ? "T" : "F"; },
+                    (Left, Right) => { return Left.Parent.GetAllies().Contains(Left).CompareTo(Right.Parent.GetAllies().Contains(Right)); })); // TODO does not work
+            CombatantData.ColumnDefs.Add("Name", new CombatantData.ColumnDef("Name", true, "VARCHAR(64)", "Name",
+                    (Data) => { return Data.Name; },
+                    (Data) => { return Data.Name; },
+                    (Left, Right) => { return Left.Name.CompareTo(Right.Name); }));
+            CombatantData.ColumnDefs.Add("StartTime", new CombatantData.ColumnDef("StartTime", true, "TIMESTAMP", "StartTime",
+                    (Data) => { return Data.StartTime == DateTime.MaxValue ? "--:--:--" : Data.StartTime.ToString("T"); },
+                    (Data) => { return Data.StartTime == DateTime.MaxValue ? "0000-00-00 00:00:00" : Data.StartTime.ToString("u").TrimEnd(new char[] { 'Z' }); },
+                    (Left, Right) => { return Left.StartTime.CompareTo(Right.StartTime); }));
+            CombatantData.ColumnDefs.Add("EndTime", new CombatantData.ColumnDef("EndTime", false, "TIMESTAMP", "EndTime",
+                    (Data) => { return Data.EndTime == DateTime.MinValue ? "--:--:--" : Data.StartTime.ToString("T"); },
+                    (Data) => { return Data.EndTime == DateTime.MinValue ? "0000-00-00 00:00:00" : Data.EndTime.ToString("u").TrimEnd(new char[] { 'Z' }); },
+                    (Left, Right) => { return Left.EndTime.CompareTo(Right.EndTime); }));
+            CombatantData.ColumnDefs.Add("Duration", new CombatantData.ColumnDef("Duration", true, "INT", "Duration",
+                    (Data) => { return Data.DurationS; },
+                    (Data) => { return Data.Duration.TotalSeconds.ToString("0"); },
+                    (Left, Right) => { return Left.Duration.CompareTo(Right.Duration); }));
+            CombatantData.ColumnDefs.Add("Damage", new CombatantData.ColumnDef("Damage", true, "BIGINT", "Damage",
+                    (Data) => { return Data.Damage.ToString(GetIntCommas()); },
+                    (Data) => { return Data.Damage.ToString(); },
+                    (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
+            CombatantData.ColumnDefs.Add("Damage%", new CombatantData.ColumnDef("Damage%", true, "VARCHAR(4)", "DamagePerc",
+                    (Data) => { return Data.DamagePercent; },
+                    (Data) => { return Data.DamagePercent; },
+                    (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); })); // TODO does not work
+            CombatantData.ColumnDefs.Add("Kills", new CombatantData.ColumnDef("Kills", false, "INT", "Kills",
+                    (Data) => { return Data.Kills.ToString(GetIntCommas()); },
+                    (Data) => { return Data.Kills.ToString(); },
+                    (Left, Right) => { return Left.Kills.CompareTo(Right.Kills); }));
+            // TODO add PlayerKills column (Kills currently include companion kills)
+            CombatantData.ColumnDefs.Add("Healed", new CombatantData.ColumnDef("Healed", false, "BIGINT", "Healed",
+                    (Data) => { return Data.Healed.ToString(GetIntCommas()); },
+                    (Data) => { return Data.Healed.ToString(); },
+                    (Left, Right) => { return Left.Healed.CompareTo(Right.Healed); }));
+            CombatantData.ColumnDefs.Add("Healed%", new CombatantData.ColumnDef("Healed%", false, "VARCHAR(4)", "HealedPerc",
+                    (Data) => { return Data.HealedPercent; },
+                    (Data) => { return Data.HealedPercent; },
+                    (Left, Right) => { return Left.Healed.CompareTo(Right.Healed); })); // TODO does not work
+            CombatantData.ColumnDefs.Add("CritHeals", new CombatantData.ColumnDef("CritHeals", false, "INT", "CritHeals",
+                    (Data) => { return Data.CritHeals.ToString(GetIntCommas()); },
+                    (Data) => { return Data.CritHeals.ToString(); },
+                    (Left, Right) => { return Left.CritHeals.CompareTo(Right.CritHeals); }));
+            CombatantData.ColumnDefs.Add("Heals", new CombatantData.ColumnDef("Heals", false, "INT", "Heals",
+                    (Data) => { return Data.Heals.ToString(GetIntCommas()); },
+                    (Data) => { return Data.Heals.ToString(); },
+                    (Left, Right) => { return Left.Heals.CompareTo(Right.Heals); }));
+            CombatantData.ColumnDefs.Add("Cleanses", new CombatantData.ColumnDef("Cleanses", false, "INT", "CureDispels",
+                    (Data) => { return Data.CureDispels.ToString(GetIntCommas()); },
+                    (Data) => { return Data.CureDispels.ToString(); },
+                    (Left, Right) => { return Left.CureDispels.CompareTo(Right.CureDispels); }));
+            CombatantData.ColumnDefs.Add("AP Gain", new CombatantData.ColumnDef("AP Gain", false, "BIGINT", "PowerReplenish",
+                    (Data) => { return Data.PowerReplenish.ToString(GetIntCommas()); },
+                    (Data) => { return Data.PowerReplenish.ToString(); },
+                    (Left, Right) => { return Left.PowerReplenish.CompareTo(Right.PowerReplenish); }));
+            CombatantData.ColumnDefs.Add("DPS", new CombatantData.ColumnDef("DPS", false, "DOUBLE", "DPS",
+                    (Data) => { return Data.DPS.ToString(GetFloatCommas()); },
+                    (Data) => { return Data.DPS.ToString(usCulture); },
+                    (Left, Right) => { return Left.DPS.CompareTo(Right.DPS); })); // TODO calculate with duration floor 1 second, unless damage is zero (creating NaN when duration also zero), then just list zero
+            CombatantData.ColumnDefs.Add("EncDPS", new CombatantData.ColumnDef("EncDPS", true, "DOUBLE", "EncDPS",
+                    (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); },
+                    (Data) => { return Data.EncDPS.ToString(usCulture); },
+                    (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
+            CombatantData.ColumnDefs.Add("EncHPS", new CombatantData.ColumnDef("EncHPS", true, "DOUBLE", "EncHPS",
+                    (Data) => { return Data.EncHPS.ToString(GetFloatCommas()); },
+                    (Data) => { return Data.EncHPS.ToString(usCulture); },
+                    (Left, Right) => { return Left.Healed.CompareTo(Right.Healed); }));
+            CombatantData.ColumnDefs.Add("CritHits", new CombatantData.ColumnDef("CritHits", false, "INT", "CritHits",
+                    (Data) => { return Data.CritHits.ToString(GetIntCommas()); },
+                    (Data) => { return Data.CritHits.ToString(); },
+                    (Left, Right) => { return Left.CritHits.CompareTo(Right.CritHits); }));
+            CombatantData.ColumnDefs.Add("Swings", new CombatantData.ColumnDef("Swings", false, "INT", "Swings",
+                    (Data) => { return Data.Swings.ToString(GetIntCommas()); },
+                    (Data) => { return Data.Swings.ToString(); },
+                    (Left, Right) => { return Left.Swings.CompareTo(Right.Swings); }));
+            CombatantData.ColumnDefs.Add("HealingTaken", new CombatantData.ColumnDef("HealingTaken", false, "BIGINT", "HealsTaken",
+                    (Data) => { return Data.HealsTaken.ToString(GetIntCommas()); },
+                    (Data) => { return Data.HealsTaken.ToString(); },
+                    (Left, Right) => { return Left.HealsTaken.CompareTo(Right.HealsTaken); }));
+            CombatantData.ColumnDefs.Add("DamageTaken", new CombatantData.ColumnDef("DamageTaken", true, "BIGINT", "DamageTaken",
+                    (Data) => { return Data.DamageTaken.ToString(GetIntCommas()); },
+                    (Data) => { return Data.DamageTaken.ToString(); },
+                    (Left, Right) => { return Left.DamageTaken.CompareTo(Right.DamageTaken); }));
+            CombatantData.ColumnDefs.Add("Deaths", new CombatantData.ColumnDef("Deaths", true, "INT", "Deaths",
+                    (Data) => { return Data.Deaths.ToString(GetIntCommas()); },
+                    (Data) => { return Data.Deaths.ToString(); },
+                    (Left, Right) => { return Left.Deaths.CompareTo(Right.Deaths); }));
+            CombatantData.ColumnDefs.Add("FCritHit%", new CombatantData.ColumnDef("FCritHit%", true, "VARCHAR(8)", "FCritHitPerc",
+                    (Data) => { return GetFilteredCritChance(Data).ToString("0'%"); },
+                    (Data) => { return GetFilteredCritChance(Data).ToString("0'%"); },
+                    (Left, Right) => { return GetFilteredCritChance(Left).CompareTo(GetFilteredCritChance(Right)); })); // TODO verify if this works for NW
+            CombatantData.ColumnDefs.Add("CritDam%", new CombatantData.ColumnDef("CritDam%", false, "VARCHAR(8)", "CritDamPerc",
+                    (Data) => { return Data.CritDamPerc.ToString("0'%"); },
+                    (Data) => { return Data.CritDamPerc.ToString("0'%"); },
+                    (Left, Right) => { return Left.CritDamPerc.CompareTo(Right.CritDamPerc); })); // TODO verify if this works for NW
+            CombatantData.ColumnDefs.Add("CritHeal%", new CombatantData.ColumnDef("CritHeal%", false, "VARCHAR(8)", "CritHealPerc",
+                    (Data) => { return Data.CritHealPerc.ToString("0'%"); },
+                    (Data) => { return Data.CritHealPerc.ToString("0'%"); },
+                    (Left, Right) => { return Left.CritHealPerc.CompareTo(Right.CritHealPerc); }));
+
+            CombatantData.ColumnDefs.Add("FlankDam%", // TODO verify if this is % of damage or % of hits, and consider having both columns
                 new CombatantData.ColumnDef("FlankDam%", false, "VARCHAR(8)", "FlankDamPrec", GetCellDataFlankDamPrec, GetSqlDataFlankDamPrec, CDCompareFlankDamPrec));
+            CombatantData.ColumnDefs.Add("DeflectDam%", // TODO verify if this is % of damage or % of hits, and consider having both columns
+                new CombatantData.ColumnDef("DeflectDam%", false, "VARCHAR(8)", "DeflectDamPrec", GetCellDataDeflectDamPrec, GetSqlDataDeflectDamPrec, CDCompareDeflectDamPrec));
             CombatantData.ColumnDefs.Add("DmgEffect%",
                 new CombatantData.ColumnDef("DmgEffect%", false, "VARCHAR(8)", "DmgEffectPrec", GetCellDataDmgEffectPrec, GetSqlDataDmgEffectPrec, CDCompareDmgEffectPrec));
             CombatantData.ColumnDefs.Add("DmgTakenEffect%",
@@ -1032,53 +1354,48 @@ namespace NWParsing_Plugin
 
 
             CombatantData.OutgoingDamageTypeDataObjects = new Dictionary<string, CombatantData.DamageTypeDef>
-		{
-			//{"Auto-Attack (Out)", new CombatantData.DamageTypeDef("Auto-Attack (Out)", -1, Color.DarkGoldenrod)},
-			//{"Skill/Ability (Out)", new CombatantData.DamageTypeDef("Skill/Ability (Out)", -1, Color.DarkOrange)},
-			{"Outgoing Damage", new CombatantData.DamageTypeDef("Outgoing Damage", 0, Color.Orange)},
-			{"Healed (Out)", new CombatantData.DamageTypeDef("Healed (Out)", 1, Color.Blue)},
-			//{"Power Drain (Out)", new CombatantData.DamageTypeDef("Power Drain (Out)", -1, Color.Purple)},
-			{"Power Replenish (Out)", new CombatantData.DamageTypeDef("Power Replenish (Out)", 1, Color.Violet)},
-			{"Cure/Dispel (Out)", new CombatantData.DamageTypeDef("Cure/Dispel (Out)", 0, Color.Wheat)},
-			//{"Threat (Out)", new CombatantData.DamageTypeDef("Threat (Out)", -1, Color.Yellow)},
-			{"All Outgoing (Ref)", new CombatantData.DamageTypeDef("All Outgoing (Ref)", 0, Color.Black)}
-		};
+        {
+            {OutDamageName, new CombatantData.DamageTypeDef("Damage", 0, Color.Orange)},
+            {OutHealedName, new CombatantData.DamageTypeDef(OutHealedName, 1, Color.Blue)},
+            {OutPowerRName, new CombatantData.DamageTypeDef(OutPowerRName, 1, Color.Violet)},
+            {OutCleanseName, new CombatantData.DamageTypeDef(OutCleanseName, 0, Color.Wheat)},
+            {OutSkillsName, new CombatantData.DamageTypeDef(OutSkillsName, -1, Color.DarkOrange)},
+            {"All Outgoing (Ref)", new CombatantData.DamageTypeDef("All Outgoing (Ref)", 0, Color.Black)}
+        };
             CombatantData.IncomingDamageTypeDataObjects = new Dictionary<string, CombatantData.DamageTypeDef>
-		{
-			{"Incoming Damage", new CombatantData.DamageTypeDef("Incoming Damage", -1, Color.Red)},
-			{"Healed (Inc)",new CombatantData.DamageTypeDef("Healed (Inc)", 1, Color.LimeGreen)},
-			//{"Power Drain (Inc)",new CombatantData.DamageTypeDef("Power Drain (Inc)", -1, Color.Magenta)},
-			{"Power Replenish (Inc)",new CombatantData.DamageTypeDef("Power Replenish (Inc)", 1, Color.MediumPurple)},
-			{"Cure/Dispel (Inc)", new CombatantData.DamageTypeDef("Cure/Dispel (Inc)", 0, Color.Wheat)},
-			//{"Threat (Inc)",new CombatantData.DamageTypeDef("Threat (Inc)", -1, Color.Yellow)},
-			{"All Incoming (Ref)",new CombatantData.DamageTypeDef("All Incoming (Ref)", 0, Color.Black)}
-		};
+        {
+            {IncDamageName, new CombatantData.DamageTypeDef(IncDamageName, -1, Color.Red)},
+            {IncHealedName,new CombatantData.DamageTypeDef(IncHealedName, 1, Color.LimeGreen)},
+            {IncPowerRName,new CombatantData.DamageTypeDef(IncPowerRName, 1, Color.MediumPurple)},
+            {IncCleanseName, new CombatantData.DamageTypeDef(IncCleanseName, 0, Color.Wheat)},
+            {IncSkillsName, new CombatantData.DamageTypeDef(IncSkillsName, -1, Color.Yellow)},
+            {"All Incoming (Ref)",new CombatantData.DamageTypeDef("All Incoming (Ref)", 0, Color.Black)}
+        };
             CombatantData.SwingTypeToDamageTypeDataLinksOutgoing = new SortedDictionary<int, List<string>>
-		{ 
-			{1, new List<string> { "Outgoing Damage" } },
-			{2, new List<string> { "Outgoing Damage" } },
-			{3, new List<string> { "Healed (Out)" } },
-			{13, new List<string> { "Power Replenish (Out)" } },
-			{20, new List<string> { "Cure/Dispel (Out)" } }
-		};
+        {
+            {1, new List<string> { OutDamageName } },
+            {2, new List<string> { OutSkillsName } },
+            {3, new List<string> { OutHealedName } },
+            {13, new List<string> { OutPowerRName } },
+            {20, new List<string> { OutCleanseName } }
+        };
             CombatantData.SwingTypeToDamageTypeDataLinksIncoming = new SortedDictionary<int, List<string>>
-		{ 
-			{1, new List<string> { "Incoming Damage" } },
-			{2, new List<string> { "Incoming Damage" } },
-			{3, new List<string> { "Healed (Inc)" } },
-			{13, new List<string> { "Power Replenish (Inc)" } },
-			{20, new List<string> { "Cure/Dispel (Inc)" } }
-		};
+        {
+            {1, new List<string> { IncDamageName } },
+            {2, new List<string> { IncSkillsName } },
+            {3, new List<string> { IncHealedName } },
+            {13, new List<string> { IncPowerRName } },
+            {20, new List<string> { IncCleanseName } }
+        };
 
             CombatantData.DamageSwingTypes = new List<int> { 1, 2 };
             CombatantData.HealingSwingTypes = new List<int> { 3 };
 
             CombatantData.DamageTypeDataNonSkillDamage = "Auto-Attack (Out)";
-            CombatantData.DamageTypeDataOutgoingDamage = "Outgoing Damage";
-            CombatantData.DamageTypeDataOutgoingHealing = "Healed (Out)";
-            CombatantData.DamageTypeDataIncomingDamage = "Incoming Damage";
-            CombatantData.DamageTypeDataIncomingHealing = "Healed (Inc)";
-
+            CombatantData.DamageTypeDataOutgoingDamage = OutDamageName;
+            CombatantData.DamageTypeDataOutgoingHealing = OutHealedName;
+            CombatantData.DamageTypeDataIncomingDamage = IncDamageName;
+            CombatantData.DamageTypeDataIncomingHealing = IncHealedName;
 
             CombatantData.ExportVariables.Clear();
             CombatantData.ExportVariables.Add("n", new CombatantData.TextExportFormatter("n", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-newline"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-newline"].DisplayedText, (Data, Extra) => { return "\n"; }));
@@ -1120,88 +1437,74 @@ namespace NWParsing_Plugin
             CombatantData.ExportVariables.Add("cures", new CombatantData.TextExportFormatter("cures", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-cures"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-cures"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "cures", Extra); }));
             CombatantData.ExportVariables.Add("maxheal", new CombatantData.TextExportFormatter("maxheal", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-maxheal"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-maxheal"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "maxheal", Extra); }));
             CombatantData.ExportVariables.Add("MAXHEAL", new CombatantData.TextExportFormatter("MAXHEAL", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-MAXHEAL"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-MAXHEAL"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "MAXHEAL", Extra); }));
-            //CombatantData.ExportVariables.Add("maxhealward", new CombatantData.TextExportFormatter("maxhealward", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-maxhealward"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-maxhealward"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "maxhealward", Extra); }));
-            //CombatantData.ExportVariables.Add("MAXHEALWARD", new CombatantData.TextExportFormatter("MAXHEALWARD", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-MAXHEALWARD"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-MAXHEALWARD"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "MAXHEALWARD", Extra); }));
             CombatantData.ExportVariables.Add("damagetaken", new CombatantData.TextExportFormatter("damagetaken", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-damagetaken"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-damagetaken"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "damagetaken", Extra); }));
             CombatantData.ExportVariables.Add("healstaken", new CombatantData.TextExportFormatter("healstaken", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-healstaken"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-healstaken"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "healstaken", Extra); }));
-            //CombatantData.ExportVariables.Add("powerdrain", new CombatantData.TextExportFormatter("powerdrain", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-powerdrain"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-powerdrain"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "powerdrain", Extra); }));
             CombatantData.ExportVariables.Add("powerheal", new CombatantData.TextExportFormatter("powerheal", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-powerheal"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-powerheal"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "powerheal", Extra); }));
             CombatantData.ExportVariables.Add("kills", new CombatantData.TextExportFormatter("kills", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-kills"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-kills"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "kills", Extra); }));
             CombatantData.ExportVariables.Add("deaths", new CombatantData.TextExportFormatter("deaths", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-deaths"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-deaths"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "deaths", Extra); }));
-            //CombatantData.ExportVariables.Add("threatstr", new CombatantData.TextExportFormatter("threatstr", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-threatstr"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-threatstr"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "threatstr", Extra); }));
-            //CombatantData.ExportVariables.Add("threatdelta", new CombatantData.TextExportFormatter("threatdelta", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-threatdelta"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-threatdelta"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "threatdelta", Extra); }));
             CombatantData.ExportVariables.Add("NAME3", new CombatantData.TextExportFormatter("NAME3", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME3"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME3"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME3", Extra); }));
             CombatantData.ExportVariables.Add("NAME4", new CombatantData.TextExportFormatter("NAME4", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME4"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME4"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME4", Extra); }));
-            CombatantData.ExportVariables.Add("NAME5", new CombatantData.TextExportFormatter("NAME5", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME5"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME5"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME5", Extra); }));
-            CombatantData.ExportVariables.Add("NAME6", new CombatantData.TextExportFormatter("NAME6", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME6"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME6"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME6", Extra); }));
-            CombatantData.ExportVariables.Add("NAME7", new CombatantData.TextExportFormatter("NAME7", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME7"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME7"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME7", Extra); }));
             CombatantData.ExportVariables.Add("NAME8", new CombatantData.TextExportFormatter("NAME8", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME8"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME8"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME8", Extra); }));
-            CombatantData.ExportVariables.Add("NAME9", new CombatantData.TextExportFormatter("NAME9", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME9"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME9"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME9", Extra); }));
-            CombatantData.ExportVariables.Add("NAME10", new CombatantData.TextExportFormatter("NAME10", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME10"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME10"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME10", Extra); }));
-            CombatantData.ExportVariables.Add("NAME11", new CombatantData.TextExportFormatter("NAME11", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME11"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME11"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME11", Extra); }));
             CombatantData.ExportVariables.Add("NAME12", new CombatantData.TextExportFormatter("NAME12", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME12"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME12"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME12", Extra); }));
-            CombatantData.ExportVariables.Add("NAME13", new CombatantData.TextExportFormatter("NAME13", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME13"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME13"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME13", Extra); }));
-            CombatantData.ExportVariables.Add("NAME14", new CombatantData.TextExportFormatter("NAME14", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME14"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME14"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME14", Extra); }));
             CombatantData.ExportVariables.Add("NAME15", new CombatantData.TextExportFormatter("NAME15", ActGlobals.ActLocalization.LocalizationStrings["exportFormattingLabel-NAME15"].DisplayedText, ActGlobals.ActLocalization.LocalizationStrings["exportFormattingDesc-NAME15"].DisplayedText, (Data, Extra) => { return CombatantFormatSwitch(Data, "NAME15", Extra); }));
-
-
+        }
+        private void FixupDamageTypeData()
+        {
             DamageTypeData.ColumnDefs.Clear();
-            DamageTypeData.ColumnDefs.Add("EncId", new DamageTypeData.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.Parent.Parent.EncId; }));
+            DamageTypeData.ColumnDefs.Add("EncId", new DamageTypeData.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.Parent.Parent.EncId; })); // TODO shows nothing
             DamageTypeData.ColumnDefs.Add("Combatant", new DamageTypeData.ColumnDef("Combatant", false, "VARCHAR(64)", "Combatant", (Data) => { return Data.Parent.Name; }, (Data) => { return Data.Parent.Name; }));
-            DamageTypeData.ColumnDefs.Add("Grouping", new DamageTypeData.ColumnDef("Grouping", false, "VARCHAR(92)", "Grouping", (Data) => { return string.Empty; }, GetDamageTypeGrouping));
+            DamageTypeData.ColumnDefs.Add("Grouping", new DamageTypeData.ColumnDef("Grouping", false, "VARCHAR(92)", "Grouping", (Data) => { return string.Empty; }, GetDamageTypeGrouping)); // TODO shows nothing, may be irrelevant to NW
             DamageTypeData.ColumnDefs.Add("Type", new DamageTypeData.ColumnDef("Type", true, "VARCHAR(64)", "Type", (Data) => { return Data.Type; }, (Data) => { return Data.Type; }));
             DamageTypeData.ColumnDefs.Add("StartTime", new DamageTypeData.ColumnDef("StartTime", false, "TIMESTAMP", "StartTime", (Data) => { return Data.StartTime == DateTime.MaxValue ? "--:--:--" : Data.StartTime.ToString("T"); }, (Data) => { return Data.StartTime == DateTime.MaxValue ? "0000-00-00 00:00:00" : Data.StartTime.ToString("u").TrimEnd(new char[] { 'Z' }); }));
             DamageTypeData.ColumnDefs.Add("EndTime", new DamageTypeData.ColumnDef("EndTime", false, "TIMESTAMP", "EndTime", (Data) => { return Data.EndTime == DateTime.MinValue ? "--:--:--" : Data.StartTime.ToString("T"); }, (Data) => { return Data.EndTime == DateTime.MinValue ? "0000-00-00 00:00:00" : Data.StartTime.ToString("u").TrimEnd(new char[] { 'Z' }); }));
             DamageTypeData.ColumnDefs.Add("Duration", new DamageTypeData.ColumnDef("Duration", false, "INT", "Duration", (Data) => { return Data.DurationS; }, (Data) => { return Data.Duration.TotalSeconds.ToString("0"); }));
             DamageTypeData.ColumnDefs.Add("Damage", new DamageTypeData.ColumnDef("Damage", true, "BIGINT", "Damage", (Data) => { return Data.Damage.ToString(GetIntCommas()); }, (Data) => { return Data.Damage.ToString(); }));
             DamageTypeData.ColumnDefs.Add("EncDPS", new DamageTypeData.ColumnDef("EncDPS", true, "DOUBLE", "EncDPS", (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); }, (Data) => { return Data.EncDPS.ToString(usCulture); }));
-            DamageTypeData.ColumnDefs.Add("CharDPS", new DamageTypeData.ColumnDef("CharDPS", false, "DOUBLE", "CharDPS", (Data) => { return Data.CharDPS.ToString(GetFloatCommas()); }, (Data) => { return Data.CharDPS.ToString(usCulture); }));
+            DamageTypeData.ColumnDefs.Add("CharDPS", new DamageTypeData.ColumnDef("CharDPS", false, "DOUBLE", "CharDPS", (Data) => { return Data.CharDPS.ToString(GetFloatCommas()); }, (Data) => { return Data.CharDPS.ToString(usCulture); })); // TODO what is this?
             DamageTypeData.ColumnDefs.Add("DPS", new DamageTypeData.ColumnDef("DPS", false, "DOUBLE", "DPS", (Data) => { return Data.DPS.ToString(GetFloatCommas()); }, (Data) => { return Data.DPS.ToString(usCulture); }));
-            DamageTypeData.ColumnDefs.Add("Average", new DamageTypeData.ColumnDef("Average", true, "FLOAT", "Average", (Data) => { return Data.Average.ToString(GetFloatCommas()); }, (Data) => { return Data.Average.ToString(usCulture); }));
-            DamageTypeData.ColumnDefs.Add("Median", new DamageTypeData.ColumnDef("Median", false, "INT", "Median", (Data) => { return Data.Median.ToString(GetIntCommas()); }, (Data) => { return Data.Median.ToString(); }));
+            DamageTypeData.ColumnDefs.Add("AverageHit", new DamageTypeData.ColumnDef("AverageHit", true, "FLOAT", "Average", (Data) => { return Data.Average.ToString(GetFloatCommas()); }, (Data) => { return Data.Average.ToString(usCulture); }));
+            DamageTypeData.ColumnDefs.Add("MedianHit", new DamageTypeData.ColumnDef("MedianHit", false, "INT", "Median", (Data) => { return Data.Median.ToString(GetIntCommas()); }, (Data) => { return Data.Median.ToString(); }));
             DamageTypeData.ColumnDefs.Add("MinHit", new DamageTypeData.ColumnDef("MinHit", true, "INT", "MinHit", (Data) => { return Data.MinHit.ToString(GetIntCommas()); }, (Data) => { return Data.MinHit.ToString(); }));
             DamageTypeData.ColumnDefs.Add("MaxHit", new DamageTypeData.ColumnDef("MaxHit", true, "INT", "MaxHit", (Data) => { return Data.MaxHit.ToString(GetIntCommas()); }, (Data) => { return Data.MaxHit.ToString(); }));
-            DamageTypeData.ColumnDefs.Add("Hits", new DamageTypeData.ColumnDef("Hits", true, "INT", "Hits", (Data) => { return Data.Hits.ToString(GetIntCommas()); }, (Data) => { return Data.Hits.ToString(); }));
             DamageTypeData.ColumnDefs.Add("CritHits", new DamageTypeData.ColumnDef("CritHits", false, "INT", "CritHits", (Data) => { return Data.CritHits.ToString(GetIntCommas()); }, (Data) => { return Data.CritHits.ToString(); }));
-            DamageTypeData.ColumnDefs.Add("Avoids", new DamageTypeData.ColumnDef("Avoids", false, "INT", "Blocked", (Data) => { return Data.Blocked.ToString(GetIntCommas()); }, (Data) => { return Data.Blocked.ToString(); }));
-            DamageTypeData.ColumnDefs.Add("Misses", new DamageTypeData.ColumnDef("Misses", false, "INT", "Misses", (Data) => { return Data.Misses.ToString(GetIntCommas()); }, (Data) => { return Data.Misses.ToString(); }));
-            DamageTypeData.ColumnDefs.Add("Swings", new DamageTypeData.ColumnDef("Swings", true, "INT", "Swings", (Data) => { return Data.Swings.ToString(GetIntCommas()); }, (Data) => { return Data.Swings.ToString(); }));
-            DamageTypeData.ColumnDefs.Add("ToHit", new DamageTypeData.ColumnDef("ToHit", false, "FLOAT", "ToHit", (Data) => { return Data.ToHit.ToString(GetFloatCommas()); }, (Data) => { return Data.ToHit.ToString(); }));
+            DamageTypeData.ColumnDefs.Add("Swings", new DamageTypeData.ColumnDef("Swings", true, "INT", "Swings", (Data) => { return Data.Swings.ToString(GetIntCommas()); }, (Data) => { return Data.Swings.ToString(); })); // TODO same as Hits for all intents and purposes, irrelevant for NW
             DamageTypeData.ColumnDefs.Add("AvgDelay", new DamageTypeData.ColumnDef("AvgDelay", false, "FLOAT", "AverageDelay", (Data) => { return Data.AverageDelay.ToString(GetFloatCommas()); }, (Data) => { return Data.AverageDelay.ToString(); }));
             DamageTypeData.ColumnDefs.Add("Crit%", new DamageTypeData.ColumnDef("Crit%", true, "VARCHAR(8)", "CritPerc", (Data) => { return Data.CritPerc.ToString("0'%"); }, (Data) => { return Data.CritPerc.ToString("0'%"); }));
+            // TODO consider filtering Crit/Flank/Deflect to consider when powers can't be affected by them, and/or adding a dmg% column in addition to the hit chance% column
 
             DamageTypeData.ColumnDefs.Add("FlankHits",
                 new DamageTypeData.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits));
             DamageTypeData.ColumnDefs.Add("Flank%",
                 new DamageTypeData.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec));
-            DamageTypeData.ColumnDefs.Add("Effectiveness",
+            DamageTypeData.ColumnDefs.Add("DeflectHits",
+                new DamageTypeData.ColumnDef("DeflectHits", false, "INT", "DeflectHits", GetCellDataDeflectHits, GetSqlDataDeflectHits));
+            DamageTypeData.ColumnDefs.Add("Deflect%",
+                new DamageTypeData.ColumnDef("Deflect%", true, "VARCHAR(8)", "DeflectPerc", GetCellDataDeflectPrec, GetSqlDataDeflectPrec));
+            DamageTypeData.ColumnDefs.Add("Effectiveness", // TODO just show zero when it's NaN
                 new DamageTypeData.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness));
-
-
+        }
+        private void FixupAttackTypeData()
+        {
             AttackType.ColumnDefs.Clear();
-            AttackType.ColumnDefs.Add("EncId", new AttackType.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.Parent.Parent.Parent.EncId; }, (Left, Right) => { return 0; }));
+            AttackType.ColumnDefs.Add("EncId", new AttackType.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.Parent.Parent.Parent.EncId; }, (Left, Right) => { return 0; })); // TODO shows nothing in ACT window
             AttackType.ColumnDefs.Add("Attacker", new AttackType.ColumnDef("Attacker", false, "VARCHAR(64)", "Attacker", (Data) => { return Data.Parent.Outgoing ? Data.Parent.Parent.Name : string.Empty; }, (Data) => { return Data.Parent.Outgoing ? Data.Parent.Parent.Name : string.Empty; }, (Left, Right) => { return 0; }));
             AttackType.ColumnDefs.Add("Victim", new AttackType.ColumnDef("Victim", false, "VARCHAR(64)", "Victim", (Data) => { return Data.Parent.Outgoing ? string.Empty : Data.Parent.Parent.Name; }, (Data) => { return Data.Parent.Outgoing ? string.Empty : Data.Parent.Parent.Name; }, (Left, Right) => { return 0; }));
-            AttackType.ColumnDefs.Add("SwingType", new AttackType.ColumnDef("SwingType", false, "TINYINT", "SwingType", GetAttackTypeSwingType, GetAttackTypeSwingType, (Left, Right) => { return 0; }));
+            AttackType.ColumnDefs.Add("SwingType", new AttackType.ColumnDef("SwingType", false, "TINYINT", "SwingType", GetAttackTypeSwingType, GetAttackTypeSwingType, (Left, Right) => { return 0; })); // TODO make human-readable
             AttackType.ColumnDefs.Add("Type", new AttackType.ColumnDef("Type", true, "VARCHAR(64)", "Type", (Data) => { return Data.Type; }, (Data) => { return Data.Type; }, (Left, Right) => { return Left.Type.CompareTo(Right.Type); }));
             AttackType.ColumnDefs.Add("StartTime", new AttackType.ColumnDef("StartTime", false, "TIMESTAMP", "StartTime", (Data) => { return Data.StartTime == DateTime.MaxValue ? "--:--:--" : Data.StartTime.ToString("T"); }, (Data) => { return Data.StartTime == DateTime.MaxValue ? "0000-00-00 00:00:00" : Data.StartTime.ToString("u").TrimEnd(new char[] { 'Z' }); }, (Left, Right) => { return Left.StartTime.CompareTo(Right.StartTime); }));
             AttackType.ColumnDefs.Add("EndTime", new AttackType.ColumnDef("EndTime", false, "TIMESTAMP", "EndTime", (Data) => { return Data.EndTime == DateTime.MinValue ? "--:--:--" : Data.EndTime.ToString("T"); }, (Data) => { return Data.EndTime == DateTime.MinValue ? "0000-00-00 00:00:00" : Data.EndTime.ToString("u").TrimEnd(new char[] { 'Z' }); }, (Left, Right) => { return Left.EndTime.CompareTo(Right.EndTime); }));
             AttackType.ColumnDefs.Add("Duration", new AttackType.ColumnDef("Duration", false, "INT", "Duration", (Data) => { return Data.DurationS; }, (Data) => { return Data.Duration.TotalSeconds.ToString("0"); }, (Left, Right) => { return Left.Duration.CompareTo(Right.Duration); }));
             AttackType.ColumnDefs.Add("Damage", new AttackType.ColumnDef("Damage", true, "BIGINT", "Damage", (Data) => { return Data.Damage.ToString(GetIntCommas()); }, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
             AttackType.ColumnDefs.Add("EncDPS", new AttackType.ColumnDef("EncDPS", true, "DOUBLE", "EncDPS", (Data) => { return Data.EncDPS.ToString(GetFloatCommas()); }, (Data) => { return Data.EncDPS.ToString(usCulture); }, (Left, Right) => { return Left.EncDPS.CompareTo(Right.EncDPS); }));
-            AttackType.ColumnDefs.Add("CharDPS", new AttackType.ColumnDef("CharDPS", false, "DOUBLE", "CharDPS", (Data) => { return Data.CharDPS.ToString(GetFloatCommas()); }, (Data) => { return Data.CharDPS.ToString(usCulture); }, (Left, Right) => { return Left.CharDPS.CompareTo(Right.CharDPS); }));
+            AttackType.ColumnDefs.Add("CharDPS", new AttackType.ColumnDef("CharDPS", false, "DOUBLE", "CharDPS", (Data) => { return Data.CharDPS.ToString(GetFloatCommas()); }, (Data) => { return Data.CharDPS.ToString(usCulture); }, (Left, Right) => { return Left.CharDPS.CompareTo(Right.CharDPS); })); // TODO what is this?
             AttackType.ColumnDefs.Add("DPS", new AttackType.ColumnDef("DPS", false, "DOUBLE", "DPS", (Data) => { return Data.DPS.ToString(GetFloatCommas()); }, (Data) => { return Data.DPS.ToString(usCulture); }, (Left, Right) => { return Left.DPS.CompareTo(Right.DPS); }));
             AttackType.ColumnDefs.Add("Average", new AttackType.ColumnDef("Average", true, "FLOAT", "Average", (Data) => { return Data.Average.ToString(GetFloatCommas()); }, (Data) => { return Data.Average.ToString(usCulture); }, (Left, Right) => { return Left.Average.CompareTo(Right.Average); }));
             AttackType.ColumnDefs.Add("Median", new AttackType.ColumnDef("Median", true, "INT", "Median", (Data) => { return Data.Median.ToString(GetIntCommas()); }, (Data) => { return Data.Median.ToString(); }, (Left, Right) => { return Left.Median.CompareTo(Right.Median); }));
             AttackType.ColumnDefs.Add("MinHit", new AttackType.ColumnDef("MinHit", true, "INT", "MinHit", (Data) => { return Data.MinHit.ToString(GetIntCommas()); }, (Data) => { return Data.MinHit.ToString(); }, (Left, Right) => { return Left.MinHit.CompareTo(Right.MinHit); }));
             AttackType.ColumnDefs.Add("MaxHit", new AttackType.ColumnDef("MaxHit", true, "INT", "MaxHit", (Data) => { return Data.MaxHit.ToString(GetIntCommas()); }, (Data) => { return Data.MaxHit.ToString(); }, (Left, Right) => { return Left.MaxHit.CompareTo(Right.MaxHit); }));
             AttackType.ColumnDefs.Add("Resist", new AttackType.ColumnDef("Resist", true, "VARCHAR(64)", "Resist", (Data) => { return Data.Resist; }, (Data) => { return Data.Resist; }, (Left, Right) => { return Left.Resist.CompareTo(Right.Resist); }));
-            AttackType.ColumnDefs.Add("Hits", new AttackType.ColumnDef("Hits", true, "INT", "Hits", (Data) => { return Data.Hits.ToString(GetIntCommas()); }, (Data) => { return Data.Hits.ToString(); }, (Left, Right) => { return Left.Hits.CompareTo(Right.Hits); }));
             AttackType.ColumnDefs.Add("CritHits", new AttackType.ColumnDef("CritHits", false, "INT", "CritHits", (Data) => { return Data.CritHits.ToString(GetIntCommas()); }, (Data) => { return Data.CritHits.ToString(); }, (Left, Right) => { return Left.CritHits.CompareTo(Right.CritHits); }));
-            AttackType.ColumnDefs.Add("Avoids", new AttackType.ColumnDef("Avoids", false, "INT", "Blocked", (Data) => { return Data.Blocked.ToString(GetIntCommas()); }, (Data) => { return Data.Blocked.ToString(); }, (Left, Right) => { return Left.Blocked.CompareTo(Right.Blocked); }));
-            AttackType.ColumnDefs.Add("Misses", new AttackType.ColumnDef("Misses", false, "INT", "Misses", (Data) => { return Data.Misses.ToString(GetIntCommas()); }, (Data) => { return Data.Misses.ToString(); }, (Left, Right) => { return Left.Misses.CompareTo(Right.Misses); }));
             AttackType.ColumnDefs.Add("Swings", new AttackType.ColumnDef("Swings", true, "INT", "Swings", (Data) => { return Data.Swings.ToString(GetIntCommas()); }, (Data) => { return Data.Swings.ToString(); }, (Left, Right) => { return Left.Swings.CompareTo(Right.Swings); }));
-            AttackType.ColumnDefs.Add("ToHit", new AttackType.ColumnDef("ToHit", true, "FLOAT", "ToHit", (Data) => { return Data.ToHit.ToString(GetFloatCommas()); }, (Data) => { return Data.ToHit.ToString(usCulture); }, (Left, Right) => { return Left.ToHit.CompareTo(Right.ToHit); }));
             AttackType.ColumnDefs.Add("AvgDelay", new AttackType.ColumnDef("AvgDelay", false, "FLOAT", "AverageDelay", (Data) => { return Data.AverageDelay.ToString(GetFloatCommas()); }, (Data) => { return Data.AverageDelay.ToString(usCulture); }, (Left, Right) => { return Left.AverageDelay.CompareTo(Right.AverageDelay); }));
             AttackType.ColumnDefs.Add("Crit%", new AttackType.ColumnDef("Crit%", true, "VARCHAR(8)", "CritPerc", (Data) => { return Data.CritPerc.ToString("0'%"); }, (Data) => { return Data.CritPerc.ToString("0'%"); }, (Left, Right) => { return Left.CritPerc.CompareTo(Right.CritPerc); }));
 
@@ -1209,31 +1512,38 @@ namespace NWParsing_Plugin
                 new AttackType.ColumnDef("FlankHits", false, "INT", "FlankHits", GetCellDataFlankHits, GetSqlDataFlankHits, AttackTypeCompareFlankHits));
             AttackType.ColumnDefs.Add("Flank%",
                 new AttackType.ColumnDef("Flank%", true, "VARCHAR(8)", "FlankPerc", GetCellDataFlankPrec, GetSqlDataFlankPrec, AttackTypeCompareFlankPrec));
+            AttackType.ColumnDefs.Add("DeflectHits",
+                new AttackType.ColumnDef("DeflectHits", false, "INT", "DeflectHits", GetCellDataDeflectHits, GetSqlDataDeflectHits, AttackTypeCompareDeflectHits));
+            AttackType.ColumnDefs.Add("Deflect%",
+                new AttackType.ColumnDef("Deflect%", true, "VARCHAR(8)", "DeflectPerc", GetCellDataDeflectPrec, GetSqlDataDeflectPrec, AttackTypeCompareDeflectPrec));
             AttackType.ColumnDefs.Add("Effectiveness",
                 new AttackType.ColumnDef("Effectiveness", true, "VARCHAR(8)", "Effectiveness", GetCellDataEffectiveness, GetSqlDataEffectiveness, AttackTypeCompareEffectiveness));
-
-
+        }
+        private void FixupMasterSwingData()
+        {
             MasterSwing.ColumnDefs.Clear();
             MasterSwing.ColumnDefs.Add("EncId", new MasterSwing.ColumnDef("EncId", false, "CHAR(8)", "EncId", (Data) => { return string.Empty; }, (Data) => { return Data.ParentEncounter.EncId; }, (Left, Right) => { return 0; }));
             MasterSwing.ColumnDefs.Add("Time", new MasterSwing.ColumnDef("Time", true, "TIMESTAMP", "STime", (Data) => { return Data.Time.ToString("T"); }, (Data) => { return Data.Time.ToString("u").TrimEnd(new char[] { 'Z' }); }, (Left, Right) => { return Left.Time.CompareTo(Right.Time); }));
             MasterSwing.ColumnDefs.Add("Attacker", new MasterSwing.ColumnDef("Attacker", true, "VARCHAR(64)", "Attacker", (Data) => { return Data.Attacker; }, (Data) => { return Data.Attacker; }, (Left, Right) => { return Left.Attacker.CompareTo(Right.Attacker); }));
-            MasterSwing.ColumnDefs.Add("SwingType", new MasterSwing.ColumnDef("SwingType", false, "TINYINT", "SwingType", (Data) => { return Data.SwingType.ToString(); }, (Data) => { return Data.SwingType.ToString(); }, (Left, Right) => { return Left.SwingType.CompareTo(Right.SwingType); }));
+            MasterSwing.ColumnDefs.Add("SwingType", new MasterSwing.ColumnDef("SwingType", false, "TINYINT", "SwingType", (Data) => { return Data.SwingType.ToString(); }, (Data) => { return Data.SwingType.ToString(); }, (Left, Right) => { return Left.SwingType.CompareTo(Right.SwingType); })); // TODO make human-readable
             MasterSwing.ColumnDefs.Add("AttackType", new MasterSwing.ColumnDef("AttackType", true, "VARCHAR(64)", "AttackType", (Data) => { return Data.AttackType; }, (Data) => { return Data.AttackType; }, (Left, Right) => { return Left.AttackType.CompareTo(Right.AttackType); }));
             MasterSwing.ColumnDefs.Add("DamageType", new MasterSwing.ColumnDef("DamageType", true, "VARCHAR(64)", "DamageType", (Data) => { return Data.DamageType; }, (Data) => { return Data.DamageType; }, (Left, Right) => { return Left.DamageType.CompareTo(Right.DamageType); }));
             MasterSwing.ColumnDefs.Add("Victim", new MasterSwing.ColumnDef("Victim", true, "VARCHAR(64)", "Victim", (Data) => { return Data.Victim; }, (Data) => { return Data.Victim; }, (Left, Right) => { return Left.Victim.CompareTo(Right.Victim); }));
             MasterSwing.ColumnDefs.Add("DamageNum", new MasterSwing.ColumnDef("DamageNum", false, "INT", "Damage", (Data) => { return ((int)Data.Damage).ToString(); }, (Data) => { return ((int)Data.Damage).ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
             //MasterSwing.ColumnDefs.Add("Damage", new MasterSwing.ColumnDef("Damage", true, "VARCHAR(128)", "DamageString", /* lambda */ (Data) => { return Data.Damage.ToString(); }, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
             // As a C# lesson, the above lines(lambda expressions) can also be written as(anonymous methods):
-            
+
             MasterSwing.ColumnDefs.Add("Damage",
                 new MasterSwing.ColumnDef("Damage", true, "VARCHAR(128)", "DamageString", GetCellDataDamage, (Data) => { return Data.Damage.ToString(); }, (Left, Right) => { return Left.Damage.CompareTo(Right.Damage); }));
 
-            MasterSwing.ColumnDefs.Add("Critical", new MasterSwing.ColumnDef("Critical", true, "CHAR(1)", "Critical", /* anonymous */ delegate(MasterSwing Data) { return Data.Critical.ToString(); }, delegate(MasterSwing Data) { return Data.Critical.ToString(usCulture)[0].ToString(); }, delegate(MasterSwing Left, MasterSwing Right) { return Left.Critical.CompareTo(Right.Critical); }));
+            MasterSwing.ColumnDefs.Add("Critical", new MasterSwing.ColumnDef("Critical", true, "CHAR(1)", "Critical", /* anonymous */ delegate (MasterSwing Data) { return Data.Critical.ToString(); }, delegate (MasterSwing Data) { return Data.Critical.ToString(usCulture)[0].ToString(); }, delegate (MasterSwing Left, MasterSwing Right) { return Left.Critical.CompareTo(Right.Critical); }));
             // Or also written as(delegated methods):
             MasterSwing.ColumnDefs.Add("Special", new MasterSwing.ColumnDef("Special", true, "VARCHAR(64)", "Special", /* delegate */ GetCellDataSpecial, GetSqlDataSpecial, MasterSwingCompareSpecial));
-            
+
             MasterSwing.ColumnDefs.Add("Flank",
                 new MasterSwing.ColumnDef("Flank", true, "CHAR(1)", "Flank", GetCellDataFlank, GetSqlDataFlank, MasterSwingCompareFlank));
+            MasterSwing.ColumnDefs.Add("Deflect",
+                new MasterSwing.ColumnDef("Deflect", true, "CHAR(1)", "Deflect", GetCellDataDeflect, GetSqlDataDeflect, MasterSwingCompareDeflect));
             MasterSwing.ColumnDefs.Add("BaseDamage",
                 new MasterSwing.ColumnDef("BaseDamage", true, "INT", "BaseDamageString", GetCellDataBaseDamage, GetSqlDataBaseDamage, MasterSwingCompareBaseDamage));
             MasterSwing.ColumnDefs.Add("Effectiveness",
@@ -1242,8 +1552,16 @@ namespace NWParsing_Plugin
                 new MasterSwing.ColumnDef("DmgToShield", false, "VARCHAR(128)", "DmgToShieldstring", GetCellDataDmgToShield, GetSqlDataDmgToShield, MasterSwingCompareDmgToShield));
             MasterSwing.ColumnDefs.Add("ShieldP",
                 new MasterSwing.ColumnDef("ShieldP", false, "VARCHAR(8)", "ShieldPDtring", GetCellDataShieldP, GetSqlDataShieldP, MasterSwingCompareShieldP));
-
-
+        }
+        private void FixupCombatDataStructures()
+        {
+            // - Remove data types that do not apply to Neverwinter combat logs.
+            // - Add new data types just for Neverwinter.
+            FixupEncounterData();
+            FixupCombatantData();
+            FixupDamageTypeData();
+            FixupAttackTypeData();
+            FixupMasterSwingData();
             ActGlobals.oFormActMain.ValidateLists();
             ActGlobals.oFormActMain.ValidateTableSetup();
         }
@@ -1677,9 +1995,9 @@ namespace NWParsing_Plugin
             List<AttackType> allAttackTypes = new List<AttackType>();
             List<AttackType> filteredAttackTypes = new List<AttackType>();
 
-            foreach (KeyValuePair<string, AttackType> item in Data.Items["Outgoing Damage"].Items)
+            foreach (KeyValuePair<string, AttackType> item in Data.Items[OutDamageName].Items)
                 allAttackTypes.Add(item.Value);
-            foreach (KeyValuePair<string, AttackType> item in Data.Items["Healed (Out)"].Items)
+            foreach (KeyValuePair<string, AttackType> item in Data.Items[OutHealedName].Items)
                 allAttackTypes.Add(item.Value);
 
             foreach (AttackType item in allAttackTypes)
@@ -1750,12 +2068,10 @@ namespace NWParsing_Plugin
         void oFormActMain_LogFileChanged(bool IsImport, string NewLogFileName)
         {
             curActionTime = DateTime.MinValue;
-            //purgePetCache();
             petOwnerRegistery.Clear();
             entityOwnerRegistery.Clear();
             magicMissileLastHit.Clear();
             unmatchedShieldLines.Clear();
-
             playersCharacterFound = false;
         }
 
@@ -1805,8 +2121,14 @@ namespace NWParsing_Plugin
             // Fix up the ParsedLine to be easy to process.
             ProcessBasic(pl);
 
+            // TODO ally detect v1.0
+            // mark all players as allies unless they have engaged in a hostile action against a player or companion
+            // mark companion with same ally status as their owners
+            // mark all NPCs as non-allies unless they are healing a player
+            // in a later version, try to filter out players that are aiding enemies as non-allies (they might be considered ally if not directly hostile towards other player)
+
             // Detect Player names..
-            if ( ! (playersCharacterFound || isImport ) )
+            if (!(playersCharacterFound || isImport))
             {
                 if (pl.ownEntityType == EntityType.Player)
                 {
@@ -1852,20 +2174,27 @@ namespace NWParsing_Plugin
             // Add calculated data fields to the ParsedLine.
             //
 
-
             if (line.ownDsp == "" && line.ownInt == "")
             {
                 // Ugly fix for lines without an owner
-                line.ownDsp = NW_Parser.unk;
-                line.ownInt = NW_Parser.unkInt;
+                if (line.srcDsp != "")
+                {
+                    // If there's a source, use that.
+                    line.ownDsp = line.srcDsp;
+                    line.ownInt = line.srcInt;
+                }
+                else
+                {
+                    line.ownDsp = NW_Parser.unk;
+                    line.ownInt = NW_Parser.unkInt;
+                }
             }
             else if (line.ownInt[0] == 'P') { line.ownEntityType = EntityType.Player; }
-            else if (line.ownInt[0] == 'C') 
+            else if (line.ownInt[0] == 'C')
             {
                 // There should never be a Pet or Entity in this possition??
                 line.ownEntityType = EntityType.Creature;
             }
-
 
             if (line.srcInt == "*")
             {
@@ -1875,15 +2204,8 @@ namespace NWParsing_Plugin
             }
             else if ((line.srcInt == "") && (line.srcDsp == ""))
             {
-                //
-                // // Ugly fix for lines without a source
-                // // srcDsp = NW_Parser.unk;
-                // // srcInt = NW_Parser.unkInt;
-                // 
-                // Ugly fix does not work.  See this valid example from a log:
                 // "13:07:02:13:48:18.1::Kallista Hellbourne,P[200674407@288107 Kallista Hellbourne@tonyleon],,,Sentry,C[1150404 Frost_Goblin_Sentry],Storm Spell,Pn.Zh5vu,Lightning,ShowPowerDisplayName,580.333,0"
                 // The Control Wizard effect Storm Spell seems to not have a source.  Should just use the owner in this case.
-                // If the owner is unknown this will work as before.
 
                 line.srcDsp = line.ownDsp;
                 line.srcInt = line.ownInt;
@@ -1928,7 +2250,7 @@ namespace NWParsing_Plugin
                 line.tgtInt = NW_Parser.unkInt;
             }
             else if (line.tgtInt[0] == 'P') { line.tgtEntityType = EntityType.Player; }
-            else if (line.tgtInt[0] == 'C') 
+            else if (line.tgtInt[0] == 'C')
             {
                 // Basic Pet and Entity detection..
 
@@ -1936,7 +2258,7 @@ namespace NWParsing_Plugin
                 {
                     line.tgtEntityType = EntityType.Pet;
                 }
-                else if (line.tgtInt.Contains(" Entity_"))
+                else if (line.tgtInt.Contains(" Entity_") || line.tgtInt.Contains(" Artifact_Weapon_Illusion_Clone"))
                 {
                     line.tgtEntityType = EntityType.Entity;
                 }
@@ -1959,9 +2281,24 @@ namespace NWParsing_Plugin
             line.encAttackerName = line.ownDsp;
             line.unitAttackerName = line.ownDsp;
 
-            // We assume the owner is the owner of the source for this processing.
+            if (Array.IndexOf(NW_Parser.companionEntityPowers, line.evtInt) != -1)
+            {
+                OwnerInfo info = petOwnerRegistery.ResolveByPlayer(line.ownInt);
+                string attackerName = unk;
 
-            if (line.srcEntityType == EntityType.Pet)
+                if (info != null) {
+                    attackerName = info.petDsp + " [" + info.ownerDsp + "'s Pet]";
+                }
+
+                line.encAttackerName = line.ownDsp;
+                line.unitAttackerName = attackerName;
+                if (this.checkBox_mergePets.Checked)
+                {
+                    line.unitAttackerName = line.ownDsp;
+                }
+            }
+            // We assume the owner is the owner of the source for this processing.
+            else if (line.srcEntityType == EntityType.Pet)
             {
                 // Use the pet owner name for encounter name and filtering.
                 line.encAttackerName = line.ownDsp;
@@ -1972,6 +2309,11 @@ namespace NWParsing_Plugin
                 {
                     line.unitAttackerName = line.ownDsp;
                 }
+            }
+            else if (line.ownEntityType == EntityType.Player && line.srcInt.Contains("Artifact_Weapon_Illusion_Clone"))
+            {
+                // if not merging mirage weapons with player
+                // line.unitAttackerName = "Mirage Weapon" + " [" + line.ownDsp + "'s Entity]";
             }
             else if (line.ownEntityType == EntityType.Creature)
             {
@@ -2048,7 +2390,7 @@ namespace NWParsing_Plugin
                                     String creatureId = owner.ownerInt.Split()[0].Substring(2);
                                     line.unitAttackerName = owner.ownerDsp + " [" + creatureId + "]";
                                 }
-              
+
                             }
                             else
                             {
@@ -2066,7 +2408,7 @@ namespace NWParsing_Plugin
                 case EntityType.Creature:
                     {
                         line.encAttackerName = line.srcDsp;
-                        
+
                         if (checkBox_mergeNPC.Checked)
                         {
                             // Merge all NPCs to a single name.
@@ -2078,7 +2420,7 @@ namespace NWParsing_Plugin
                             String creatureId = line.srcInt.Split()[0].Substring(2);
                             line.unitAttackerName = line.srcDsp + " [" + creatureId + "]";
                         }
-              
+
                         break;
                     }
 
@@ -2197,9 +2539,9 @@ namespace NWParsing_Plugin
                 // 13:07:09:14:00:23.2::Rune,C[317 Pvp_Rune_Heal],,*,Mus'Mugen Uhlaalaa,P[201045055@5998737 Mus'Mugen Uhlaalaa@bupfen],Heal,Pn.R0jdk,HitPoints,,-1136.92,0
 
                 if (l.evtInt == "Pn.R0jdk") // Assume this is PVP Rune Heal for now...
-                {   
+                {
                     AddCombatActionNW(
-                        (int)SwingTypeEnum.Healing, l.critical, false, l.special, l.unitTargetName,
+                        (int)SwingTypeEnum.Healing, l.critical, false, false, l.special, l.unitTargetName,
                         "PVP Heal Rune", new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                         l.ts, l.unitTargetName, l.type);
                 }
@@ -2224,9 +2566,9 @@ namespace NWParsing_Plugin
                     // 13:07:10:11:02:20.6::,,,,Brandeor,P[201267923@5148411 Brandeor@brandeor],Campfire,Pn.Dbm4um1,HitPoints,,-525.321,0
 
                     AddCombatActionNW(
-                        (int)SwingTypeEnum.Healing, l.critical, false, l.special, l.unitTargetName,
+                        (int)SwingTypeEnum.Healing, l.critical, false, false, l.special, l.unitTargetName,
                         l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
-                        l.ts, l.unitTargetName, l.type);                    
+                        l.ts, l.unitTargetName, l.type);
                 }
                 else if (l.evtInt == "Pn.Zrqjy1") // Chaotic Growth
                 {
@@ -2254,7 +2596,7 @@ namespace NWParsing_Plugin
                         if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, cgi.encName, l.encTargetName))
                         {
                             AddCombatActionNW(
-                                (int)SwingTypeEnum.Healing, l.critical, l.flank, l.unitAttackerName, cgi.unitName,
+                                (int)SwingTypeEnum.Healing, l.critical, l.flank, l.dodge, l.unitAttackerName, cgi.unitName,
                                 l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
@@ -2269,7 +2611,7 @@ namespace NWParsing_Plugin
                         if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encTargetName, l.encTargetName))
                         {
                             AddCombatActionNW(
-                                (int)SwingTypeEnum.Healing, l.critical, l.flank, l.unitAttackerName, unk,
+                                (int)SwingTypeEnum.Healing, l.critical, l.flank, l.dodge, l.unitAttackerName, unk,
                                 l.evtDsp, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                                 l.ts, l.unitTargetName, l.type);
                         }
@@ -2289,7 +2631,7 @@ namespace NWParsing_Plugin
                     // Default heal.
 
                     AddCombatActionNW(
-                        (int)SwingTypeEnum.Healing, l.critical, l.flank, l.special, l.unitAttackerName,
+                        (int)SwingTypeEnum.Healing, l.critical, l.flank, l.dodge, l.special, l.unitAttackerName,
                         l.attackType, new Dnum(-magAdj), -l.mag, -l.magBase, l.logInfo.detectedTime,
                         l.ts, l.unitTargetName, l.type);
                 }
@@ -2298,30 +2640,53 @@ namespace NWParsing_Plugin
 
         private void ProcessActionShields(ParsedLine l)
         {
-            int magAdj = (int)Math.Round(l.mag);
-            int magBaseAdj = (int)Math.Round(l.magBase);
+            // TODO try to improve shield detection (shield/overshield/temp HP), determine if it works on all shield-carrying paragons/songward/etc. Would be good if we can consistently detect overall effectiveness in all cases of shields
 
-            // Shielding goes first and acts like a heal to cancel coming damage.  Attacker has his own damage line.  example:
+            // Blue overshields:
+            // Fully shielded, Physical is damage absorbed:
+            // 20:06:10:15:39:10.1::Halaster,C[64 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Arcane Blast,Pn.Zu6srm,Shield,,-190600,0
+            // 20:06:10:15:39:10.1::Halaster,C[64 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Arcane Blast,Pn.Zu6srm,Physical,,190600,381200
+            // Partially shielded, Physical is total damage:
+            // 20:06:10:10:25:20.9::Halaster,C[10 M17_Trial_Boss_Halaster],,*,Character,P[513125329@28357045 Character@user],Duumvirate,Pn.T3r6sh,Shield,ShieldBreak,-388515,0
+            // 20:06:10:10:25:20.9::Halaster,C[10 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Duumvirate, Pn.T3r6sh,Physical,ShieldBreak,668405,1.33681e+06
 
-            // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Shield,,-349.348,-154.608
-            // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Shield,,-559.613,-247.663
-            // 13:07:02:10:48:49.1::Neston,P[200243656@6371989 Neston@adamtech],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Forgemaster's Flame,Pn.Lbf9ic,Radiant,,154.608,349.348
-            // 13:07:02:10:48:49.1::SorXian,P[201063397@7511146 SorXian@sorxian],,*,Flemming Fedtgebis,P[201082649@7532407 Flemming Fedtgebis@feehavregroed],Entangling Force,Pn.Oonws91,Arcane,,247.663,559.613
-            
-            // NOTE:
-            // Notice that the mag and magBase numbers are swap in the shield line verse the damage line.
-            // Therefore the amount shield == magBase ???
-            // The mag is meaningless ???
-            // If mag > magBase on the attack is all damage not shielded ???  (ie high armor pen)
+            // Tank shields:
+            // Fully shielded, no way to determine base damage:
+            // 20:03:13:22:14:10.7::Pillar Fire,C[24305 M18_Dungeon_Boss_2_Pillar_Fire],,*,Character,P[513125329@28357045 Character@user],Pool of Fire,Pn.Yg7mkc1,Shield,,-43312.5,0
+            // Partially shielded, Physical is damage to HP:
+            // 20:06:10:10:45:25.3::Halaster,C[539 M17_Trial_Boss_Halaster],,*,Character,P[513125329@28357045 Character@user],Duumvirate,Pn.T3r6sh,Shield,ShieldBreak,-540850,0
+            // 20:06:10:10:45:25.3::Halaster,C[539 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Duumvirate, Pn.T3r6sh,Physical,Dodge | ShieldBreak,355223,3.98255e+06
+            // Half shielded by Paladin Divine Champion:
+            // 20:06:10:15:29:43.0::Halaster,C[40 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Arcane Blast,Pn.Zu6srm,Shield,,-49459.2,0
+            // 20:06:10:15:29:43.0::Halaster,C[40 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Arcane Blast,Pn.Zu6srm,Physical,Dodge,49459.2,395673
+            // Notice that this looks identical to the fully blue-shielded case above apart from the effectiveness.
 
-            // NOTE:
-            // NW Patch on 7/17/2013 changed shield to report blocked damage in the mag field.
-            // 13:07:18:10:25:54.2::Miner,C[1445 Mindflayer_Duergarminerthrall],,*,Largoevo,P[201228983@6531604 Largoevo@largoevo],Melee Attack,Pn.M7kie6,Shield,,-242.837,0
-            // Actuall not sure on this....
-            
-            //
-            // Target prevented damage.
-            //
+            // Fully absorbed by both types of Shield, Physical is damage absorbed:
+            // 20:03:13:22:14:53.8::Pillar Fire,C[24308 M18_Dungeon_Boss_2_Pillar_Fire],,*,Character, P[513125329@28357045 Character@user], Pool of Fire, Pn.Yg7mkc1,Shield,,-21284.9,0
+            // 20:03:13:22:14:53.8::Pillar Fire,C[24308 M18_Dungeon_Boss_2_Pillar_Fire],,*,Character, P[513125329@28357045 Character@user], Pool of Fire, Pn.Yg7mkc1,Shield,,-21284.9,0
+            // 20:03:13:22:14:53.8::Pillar Fire,C[24308 M18_Dungeon_Boss_2_Pillar_Fire],,*,Character, P[513125329@28357045 Character@user], Pool of Fire, Pn.Yg7mkc1,Physical,,42569.9,86625
+            // There's no way to tell which line is which type of shield.
+
+            // Fully absorbed, breaking tank shield but not overshield, Physical damage number is the damage absorbed:
+            // 20:06:10:10:17:34.7::Halaster,C[10 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Duumvirate, Pn.6h4go6,Shield,ShieldBreak,-286873,0
+            // 20:06:10:10:17:34.7::Halaster,C[10 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Duumvirate, Pn.6h4go6,Shield,ShieldBreak,-158627,0
+            // 20:06:10:10:17:34.7::Halaster,C[10 M17_Trial_Boss_Halaster],,*,Character, P[513125329@28357045 Character@user], Duumvirate, Pn.6h4go6,Physical,ShieldBreak,445500,891000
+
+            // Not quite fully absorbed, breaking both shields, so Physical damage number is the damage to HP:
+            // 20:06:10:10:17:34.8::Halaster,C[10 M17_Trial_Boss_Halaster],,*,Barbarian,P[514242424@5215280 Barbarian@other],Duumvirate,Pn.T3r6sh,Shield,ShieldBreak,-402401,0
+            // 20:06:10:10:17:34.8::Halaster,C[10 M17_Trial_Boss_Halaster],,*,Barbarian,P[514242424@5215280 Barbarian@other],Duumvirate,Pn.T3r6sh,Shield,ShieldBreak,-448137,0
+            // 20:06:10:10:17:34.8::Halaster,C[10 M17_Trial_Boss_Halaster],,*,Barbarian,P[514242424@5215280 Barbarian@other],Duumvirate,Pn.T3r6sh,Physical,ShieldBreak,49144.1,1.79936e+06
+
+            // So it seems that we need to collect up to two shield lines per Physical line.  If they add up to the same amount as Physical, it's fully shielded; otherwise it's partial.
+            // There's no obvious way to distinguish the two partially shielded cases; I guess we need to distinguish them based on whether adding the absorbed damage would make effectiveness
+            // improbably high.  See ProcessActionDamage for the implementation.
+
+            // For some reason we sometimes get an extra line blocking 0 damage, ignore it:
+            // 19:05:21:11:35:43.8::Arcturia,C[13942 M16_Boss_Arcturia_Dungeon],,*,Third,P[512369627@6638553 Third@third],Arcturia's Wail,Pn.Be1dij1,Shield,,-0,0
+            // 19:05:21:11:35:43.8::Arcturia,C[13942 M16_Boss_Arcturia_Dungeon],,*,Third,P[512369627@6638553 Third@third],Arcturia's Wail,Pn.Be1dij1,Shield,ShieldBreak,-18267,0
+            // 19:05:21:11:35:43.8::Arcturia,C[13942 M16_Boss_Arcturia_Dungeon],,*,Third,P[512369627@6638553 Third@third],Arcturia's Wail,Pn.Be1dij1,Physical,ShieldBreak,215063,333000
+            if (l.mag == -0 && l.magBase == 0)
+                return;
 
             l.logInfo.detectedType = l.critical ? Color.Green.ToArgb() : Color.DarkGreen.ToArgb();
 
@@ -2338,19 +2703,19 @@ namespace NWParsing_Plugin
                 float mag = 0;
                 float magBase = 0;
 
-                // This is just weird...
                 if (l.magBase == 0) // Don't use magBaseAdj here.  Rounded to zero is not zero.
                 {
-                    shielded = new Dnum( -magAdj );
                     mag = -l.mag;
                     magBase = -l.magBase;
                 }
                 else
                 {
-                    shielded = new Dnum(-magBaseAdj);
                     mag = -l.magBase;
                     magBase = -l.mag;
                 }
+                l.mag = mag;
+                l.magBase = magBase;
+                shielded = new Dnum((int)mag);
 
                 // SwingType = Heal
                 // special = attacker
@@ -2377,12 +2742,19 @@ namespace NWParsing_Plugin
 
             if (ActGlobals.oFormActMain.InCombat)
             {
-                ProcessNamesOST(l);
+                if (l.evtDsp == "Cleanse")
+                {
+                    ProcessNamesOST(l);
 
-                AddCombatActionNW(
-                    (int)SwingTypeEnum.CureDispel, l.critical, l.flank, l.special, 
-                    l.unitAttackerName, l.attackType, Dnum.NoDamage, l.mag, l.magBase, 
-                    l.logInfo.detectedTime, l.ts, l.unitTargetName, l.type );
+                    AddCombatActionNW(
+                        (int)SwingTypeEnum.CureDispel, l.critical, l.flank, l.dodge, l.special,
+                        l.unitAttackerName, l.attackType, Dnum.NoDamage, l.mag, l.magBase,
+                        l.logInfo.detectedTime, l.ts, l.unitTargetName, l.type);
+                }
+                else
+                {
+                    // ignore the rest as they're only expire messages
+                }
             }
         }
 
@@ -2423,7 +2795,7 @@ namespace NWParsing_Plugin
                     // Target is the source as well.
 
                     AddCombatActionNW(
-                        (int)SwingTypeEnum.PowerHealing, l.critical, false, "", "Trickster [" + l.tgtDsp + "]",
+                        (int)SwingTypeEnum.PowerHealing, l.critical, false, false, "", "Trickster [" + l.tgtDsp + "]",
                         "Bait and Switch", new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
                         l.ts, l.tgtDsp, l.type);
 
@@ -2441,7 +2813,7 @@ namespace NWParsing_Plugin
                     ProcessNamesST(l);
 
                     AddCombatActionNW(
-                        (int)SwingTypeEnum.PowerHealing, l.critical, false, l.unitAttackerName, l.unitTargetName,
+                        (int)SwingTypeEnum.PowerHealing, l.critical, false, false, l.unitAttackerName, l.unitTargetName,
                         l.evtDsp, new Dnum(-magAdj), -l.mag, 0, l.logInfo.detectedTime,
                         l.ts, l.unitTargetName, l.type);
                 }
@@ -2457,11 +2829,11 @@ namespace NWParsing_Plugin
                 {
                     // Normal Power case...
                     ProcessNamesOST(l);
-
+                    //  Trying to not end combat via power
                     AddCombatActionNW(
-                        (int)SwingTypeEnum.PowerHealing, l.critical, l.flank, l.special,
-                        l.unitAttackerName, l.attackType, new Dnum(-magAdj), -l.mag, -l.magBase,
-                        l.logInfo.detectedTime, l.ts, l.unitTargetName, l.type);
+                    (int)SwingTypeEnum.PowerHealing, l.critical, false, l.dodge, l.special,
+                    l.unitAttackerName, l.attackType, new Dnum(-magAdj), -l.mag, -l.magBase,
+                    l.logInfo.detectedTime, l.ts, l.unitTargetName, l.type);
                 }
             }
         }
@@ -2469,6 +2841,8 @@ namespace NWParsing_Plugin
         private void ProcessActionSPDN(ParsedLine l)
         {
             // Handle all the buff and proc buffs/debuffs
+            int magAdj = (int)Math.Round(l.mag);
+            int magBaseAdj = (int)Math.Round(l.magBase);
             // type: PowerRecharge, Null, Alacrity, CombatAdvantage, Lightning(Storm Spell), CritSeverity, ...
 
             l.logInfo.detectedType = Color.DarkTurquoise.ToArgb();
@@ -2506,7 +2880,7 @@ namespace NWParsing_Plugin
             else if (injuryTypes.ContainsKey(l.evtInt))
             {
                 // Injure...
-                
+
                 // Ignore this as it is not reall part of combat.
             }
             else
@@ -2516,7 +2890,11 @@ namespace NWParsing_Plugin
                 if (ActGlobals.oFormActMain.InCombat)
                 {
                     ProcessNamesOST(l);
-                    AddCombatActionHostile(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
+                    //   AddCombatActionHostile(l, (int)SwingTypeEnum.NonMelee, l.critical, l.special, l.attackType, Dnum.NoDamage, 0, l.type);
+                    AddCombatActionNW(
+                    (int)SwingTypeEnum.NonMelee, l.critical, l.flank, l.dodge, l.special,
+                    l.unitAttackerName, l.attackType, new Dnum(-magAdj), -l.mag, -l.magBase,
+                    l.logInfo.detectedTime, l.ts, l.unitTargetName, l.type);
                 }
             }
         }
@@ -2543,7 +2921,7 @@ namespace NWParsing_Plugin
                 object val;
                 if (msShielded.Tags.TryGetValue("DamageF", out val))
                 {
-                    float df = (float) val;
+                    float df = (float)val;
                     string shieldSpecialText = "Shield(" + df.ToString("F1") + ")";
 
                     if (special == "None")
@@ -2555,28 +2933,52 @@ namespace NWParsing_Plugin
                         special = l.special + " | " + shieldSpecialText;
                     }
 
+                    // FIXME ~~Track whether a player is a tank?  We only ever need to add if they are.~~
+                    // Disagree. Non-tanks have shields (dreadnought, both bard paragons with Song Ward class feature)
+                    if ((int)df == (int)l.mag)
+                    {
+                        // If absorbed == magnitude, it was probably fully absorbed and we don't want to add them.
+                        // But it might have been half-absorbed by Paladin Divine Champion, so check iff effectiveness is too low.
+                        // Add if the effectiveness is lower than half what we expect (~50% normally, ~25% with deflect).
+                        // This can wrongly add if DR is buffed to over 74% (max is 80%), but that's rare even in heal checks.
+                        float dr = (float)(l.dodge ? 0.13 : 0.26);
+                        if (l.mag < l.magBase * dr)
+                            l.mag += df;
+                    }
+                    else
+                    {
+                        // If absorbed != magnitude, we want to add iff the attack broke a tank's shield.
+                        // Add unless the effectiveness with it added is higher than we expect.
+                        // This can wrongly add if the absorbed amount is small compared to the attack size, but that doesn't make much difference.
+                        // This can wrongly fail to add if the player has uncapped defense, but that's unlikely for a tank.
+                        float dr = (float)(l.dodge ? 0.26 : 0.51); // Expect at least 50% DR and 50% deflect severity.
+                        float sum = l.mag + df;
+                        if (sum < l.magBase * dr)
+                            l.mag = sum;
+                    }
+                    magAdj = (int)l.mag;
                     float shielded = df / l.mag;
                     msShielded.Tags.Add("ShieldDmgF", l.mag);
                     msShielded.Tags.Add("ShieldP", shielded);
                 }
             }
 
-            if (l.evtInt == "Autodesc.Combatevent.Falling")
-            {
-                // Falling damage does not start combat...
-                if (ActGlobals.oFormActMain.InCombat)
-                {
-                    ProcessNamesOST(l);
-                    AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
-                }
-            }
-            else if (l.evtInt == "Pn.Wypyjw1") // Knight's Valor,
+            if (l.evtInt == "Pn.Wypyjw1") // Knight's Valor,
             {
                 // "13:07:18:10:30:48.3::Largoevo,P[201228983@6531604 Largoevo@largoevo],Ugan the Abominable,C[1469 Mindflayer_Miniboss_Ugan],Largoevo,P[201228983@6531604 Largoevo@largoevo],Knight's Valor,Pn.Wypyjw1,Physical,,449.42,1195.48
                 // Attack goes SRC -> TRG and ignore the owner.  The SRC is not the owner's pet.
 
                 ProcessNamesST(l);
-                AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                AddCombatActionHostile(l, (int)SwingTypeEnum.Melee, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+            }
+            else if (l.evtInt == "Pn.Q3o7t91") // Bloodletter self-damage
+            {
+                // this needs special processing so that it doesn't process names in a way that tries to attribute someone else's companion to the player, when using Bloodletter on them
+                // example: Barbarian taking damage from Bloodletter while attacking another player's companion. The player is not the owner of the companion.
+                // Attack goes OWN -> TRG, and SRC is just informational
+                // 23:07:07:17:11:40.0::Stof,P[509567510@19259169 Stof@stof#0000],Tutor,C[39688 Pet_Tutor],Stof,P[509567510@19259169 Stof@stof#0000],Bloodletter,Pn.Q3o7t91,Physical,,22160.4,29897
+                ProcessNamesTargetOnly(l); // don't use OwnerSource or OST, only one entity is really relevant with this action (the hostile inter-target damage hit is recorded separately)
+                AddCombatActionNW((int)SwingTypeEnum.Melee, l.critical, l.flank, l.dodge, l.special, l.unitTargetName, l.attackType, new Dnum(magAdj), l.mag, l.magBase, l.logInfo.detectedTime, l.ts, l.unitTargetName, l.type);
             }
             else
             {
@@ -2623,7 +3025,7 @@ namespace NWParsing_Plugin
                 if (l.flags.Contains("Miss"))
                 {
                     // TODO:  Not sure I have ever seen a "miss" in a log.  This actually valid?
-                    AddCombatActionHostile(l, l.swingType, l.critical, l.special, l.attackType, Dnum.Miss, l.type, magBaseAdj);
+                    AddCombatActionHostile(l, (int)SwingTypeEnum.Melee, l.critical, l.special, l.attackType, Dnum.Miss, l.type, magBaseAdj);
                 }
                 else 
                 */
@@ -2634,23 +3036,21 @@ namespace NWParsing_Plugin
                     {
                         // 13:07:18:10:49:21.6::Tristan,C[2120 Pet_Dog],,*,Oll'noth the Dominator,C[1997 Mindflayer_Eventboss],Takedown,Pn.Ebxsjf,KnockBack,Immune,0,0
 
-                        // Ignore these for now...
+                        // Ignore CC immunity for now...
                         l.logInfo.detectedType = Color.Gray.ToArgb();
                     }
                     else
                     {
                         // Generally damaging attacks have mag=0 and magBase > 0 when Immune.
                         l.logInfo.detectedType = Color.Maroon.ToArgb();
-                        AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, Dnum.NoDamage, l.mag, l.type, l.magBase);
+                        AddCombatActionHostile(l, (int)SwingTypeEnum.Melee, l.critical, special, l.attackType, Dnum.NoDamage, l.mag, l.type, l.magBase);
                     }
                 }
                 else if (l.dodge)
                 {
-                    // It really looks like Dodge does not stop all damage - just reduces it by about 80%...
-                    // I have seen damaging attacks that are both Dodge and Kill in the flags.
-                    // So the target dodged but still died.
+                    // "Dodge" in the log means that the attack was Deflected
                     l.logInfo.detectedType = Color.Maroon.ToArgb();
-                    AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                    AddCombatActionHostile(l, (int)SwingTypeEnum.Melee, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                 }
                 else
                 {
@@ -2662,7 +3062,7 @@ namespace NWParsing_Plugin
                     else
                     {
                         // NOT All attacks have a magBase (anymore).
-                        AddCombatActionHostile(l, l.swingType, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
+                        AddCombatActionHostile(l, (int)SwingTypeEnum.Melee, l.critical, special, l.attackType, magAdj, l.mag, l.type, l.magBase);
                     }
                 }
             }
@@ -2672,26 +3072,37 @@ namespace NWParsing_Plugin
         {
             l.logInfo.detectedType = Color.Gray.ToArgb();
 
-            if (l.type == "HitPoints")
+            if (!ActGlobals.oFormActMain.InCombat
+                && (l.evtInt == "Autodesc.Combatevent.Falling"
+                    || l.evtInt == "Pn.Mlg6n01" // Poison Spike Trap
+                    || l.evtInt == "Pn.Sv2m0c1" // Spike Trap
+                    || l.evtInt == "Pn.Rjmxw51" // Arrow Trap
+                    || l.evtInt == "Pn.O4hc6g1")) // Fall damage
+            {
+                // Ignore, environmental damage shouldn't start an encounter.
+                return;
+            }
+
+            if (l.type == "AttribModExpire") // Cleanse
+            {
+                ProcessActionCleanse(l);
+            }
+            else if (l.showPowerDisplayName)
+            {
+                // Non-damaging effects.
+                ProcessActionSPDN(l);
+            }
+            else if (l.type == "Power")
+            {
+                ProcessActionPower(l);
+            }
+            else if (l.type == "HitPoints")
             {
                 ProcessActionHeals(l);
             }
             else if (l.type == "Shield")
             {
                 ProcessActionShields(l);
-            }
-            else if (l.type == "AttribModExpire") // Cleanse
-            {
-                ProcessActionCleanse(l);
-            }
-            else if (l.type == "Power")
-            {
-                ProcessActionPower(l);
-            }
-            else if (l.showPowerDisplayName)
-            {
-                // Non-damaging effects.
-                ProcessActionSPDN(l);
             }
             else
             {
@@ -2714,13 +3125,13 @@ namespace NWParsing_Plugin
 
                 // No "Killing : Flank" ever.  Doesn't make sense since there is no damage in the kill tracking.
                 // And it messes up the kill counts.
-                // AddCombatActionHostile(l, l.swingType, l.critical, l.special, "Killing", Dnum.Death, l.type);
+                // AddCombatActionHostile(l, (int)SwingTypeEnum.Melee, l.critical, l.special, "Killing", Dnum.Death, l.type);
 
                 // Use encounter names attacker and target here.  This allows filtering
                 if (ActGlobals.oFormActMain.SetEncounter(l.logInfo.detectedTime, l.encAttackerName, l.encTargetName))
                 {
-                    MasterSwing ms = 
-                        new MasterSwing(l.swingType, l.critical, l.special, Dnum.Death, l.logInfo.detectedTime, l.ts, 
+                    MasterSwing ms =
+                        new MasterSwing((int)SwingTypeEnum.Melee, l.critical, l.special, Dnum.Death, l.logInfo.detectedTime, l.ts,
                             "Killing", l.unitAttackerName, "Death", l.unitTargetName);
                     ms.Tags.Add("Flank", l.flank);
                     ActGlobals.oFormActMain.AddCombatAction(ms);
@@ -2729,8 +3140,8 @@ namespace NWParsing_Plugin
         }
 
         // For hostile actions only.  Handles the SetEncounter().
-        private void AddCombatActionHostile(
-            ParsedLine line, int swingType, bool critical, string special, string theAttackType, Dnum Damage, float realDamage, string theDamageType, float baseDamage=0)
+        internal void AddCombatActionHostile(
+            ParsedLine line, int swingType, bool critical, string special, string theAttackType, Dnum Damage, float realDamage, string theDamageType, float baseDamage = 0)
         {
             // Use encounter names attacker and target here.  This allows filtering
             if (ActGlobals.oFormActMain.SetEncounter(line.logInfo.detectedTime, line.encAttackerName, line.encTargetName))
@@ -2739,8 +3150,14 @@ namespace NWParsing_Plugin
                 string tempAttack = theAttackType;
                 if (line.flank && this.checkBox_flankSkill.Checked) tempAttack = theAttackType + ": Flank";
 
+                if (line.srcInt.Contains("Artifact_Weapon_Illusion_Clone"))
+                {
+                    // if merging with player
+                    line.unitAttackerName = line.srcDsp;
+                    tempAttack = theAttackType + " (Mirage Weapon)";
+                }
                 AddCombatActionNW(
-                    swingType, line.critical, line.flank, special, line.unitAttackerName,
+                    swingType, line.critical, line.flank, line.dodge, special, line.unitAttackerName,
                     tempAttack, Damage, realDamage, baseDamage, line.logInfo.detectedTime,
                     line.ts, line.unitTargetName, theDamageType);
             }
@@ -2748,7 +3165,7 @@ namespace NWParsing_Plugin
 
         // Wrapper around AddCombatAction to add extra Tags that are used in the NW plugin.
         private void AddCombatActionNW(
-            int swingType, bool critical, bool flank, string special, string attacker, string theAttackType, 
+            int swingType, bool critical, bool flank, bool deflect, string special, string attacker, string theAttackType,
             Dnum damage, float realDamage, float baseDamage,
             DateTime time, int timeSorter, string victim, string theDamageType)
         {
@@ -2757,6 +3174,7 @@ namespace NWParsing_Plugin
             ms.Tags.Add("DamageF", realDamage);
             ms.Tags.Add("BaseDamage", baseDamage);
             ms.Tags.Add("Flank", flank);
+            ms.Tags.Add("Deflect", deflect);
 
             if (baseDamage > 0)
             {
@@ -2866,7 +3284,7 @@ namespace NWParsing_Plugin
         private void button_add_Click(object sender, EventArgs e)
         {
             string name = textBox_player.Text;
-            if ( ! listBox_players.Items.Contains(name) )
+            if (!listBox_players.Items.Contains(name))
             {
                 listBox_players.Items.Add(name);
                 playerCharacterNames.Add(name, true);
@@ -2937,6 +3355,7 @@ namespace NWParsing_Plugin
         }
     }
 
+    // TODO improve ownership code to handle mirage weapon clones, enemy spawners, and entity-spawning companions (tutor) properly
     internal class OwnerInfo
     {
         public string ownerDsp;
@@ -2971,48 +3390,21 @@ namespace NWParsing_Plugin
             // "13:07:03:11:47:12.6::Grizzard,P[200743305@6022049 Grizzard@shamedy],Cutter,C[9395 Winterforge_Frost_Goblin_Cutter],Grizzard,P[200743305@6022049 Grizzard@shamedy],Guard Break,Pn.Jy04um1,Power,,-23.1135,0"
             // "13:07:09:11:01:08.4::Correk,P[201028460@1546238 Correk@Gleyvien],Target Dummy,C[265291 Entity_Targetdummy],,*,Doom!,Pn.F1j0yx1,Radiant,Critical,10557.2,8445.78"
             // "13:07:09:11:01:59.5::Nasus king,P[201132249@7587600 Nasus king@portazorras],SerGay,C[265715 Pet_Clericdisciple],Target Dummy,C[265291 Entity_Targetdummy],Sacred Flame,Pn.Tegils,Physical,Flank,59.7605,0"
-            
-            bool add = false;
+
             OwnerInfo OwnerInfo = null;
 
             // Record owner of all pets we see.
-            if (line.srcEntityType == EntityType.Pet)
+            if (line.srcEntityType == EntityType.Pet && Array.IndexOf(NW_Parser.companionEntityPowers, line.evtInt) == -1)
             {
-                if (petPlayerCache.TryGetValue(line.srcInt, out OwnerInfo))
-                {
-                    if (OwnerInfo.ownerInt != line.ownInt)
-                    {
-                        // Pet Owner changed...  Not sure if possible... but just in case.
-                        petPlayerCache.Remove(OwnerInfo.petInt);
-                        playerPetCache.Remove(OwnerInfo.ownerInt);
-                        add = true;
-                    }
-                }
-                else
-                {
-                    // Check if this player had another pet registered and clean up.
-                    // Only one pet is allowed.
-                    if (playerPetCache.TryGetValue(line.ownInt, out OwnerInfo))
-                    {
-                        playerPetCache.Remove(line.ownInt);
-                        petPlayerCache.Remove(OwnerInfo.petInt);
-                    }
+                OwnerInfo = new OwnerInfo();
+                OwnerInfo.ownerDsp = line.ownDsp;
+                OwnerInfo.ownerInt = line.ownInt;
+                OwnerInfo.ownerEntityType = line.ownEntityType;
+                OwnerInfo.petDsp = line.srcDsp;
+                OwnerInfo.petInt = line.srcInt;
 
-                    add = true;
-                }
-
-                if (add)
-                {
-                    OwnerInfo = new OwnerInfo();
-                    OwnerInfo.ownerDsp = line.ownDsp;
-                    OwnerInfo.ownerInt = line.ownInt;
-                    OwnerInfo.ownerEntityType = line.ownEntityType;
-                    OwnerInfo.petDsp = line.srcDsp;
-                    OwnerInfo.petInt = line.srcInt;
-
-                    petPlayerCache.Add(line.srcInt, OwnerInfo);
-                    playerPetCache.Add(line.ownInt, OwnerInfo);
-                }
+                petPlayerCache[line.srcInt] = OwnerInfo;
+                playerPetCache[line.ownInt] = OwnerInfo;
             }
         }
 
@@ -3025,10 +3417,20 @@ namespace NWParsing_Plugin
             {
                 return petOwner;
             }
-            
+
             return null;
         }
 
+        public OwnerInfo ResolveByPlayer(string nameInt)
+        {
+            OwnerInfo petOwner = null;
+            if (playerPetCache.TryGetValue(nameInt, out petOwner))
+            {
+                return petOwner;
+            }
+
+            return null;
+        }
     }
 
     internal class EntityOwnerRegistery : OwnerRegistery
@@ -3042,38 +3444,19 @@ namespace NWParsing_Plugin
 
         public void Register(ParsedLine line)
         {
-            bool add = false;
             OwnerInfo OwnerInfo = null;
 
             // Record owner of all entities we see.
             if (line.srcEntityType == EntityType.Entity)
             {
-                if (entityPlayerCache.TryGetValue(line.srcInt, out OwnerInfo))
-                {
-                    if (OwnerInfo.ownerInt != line.ownInt)
-                    {
-                        // Pet Owner changed...  Not sure if possible... but just in case.
-                        entityPlayerCache.Remove(OwnerInfo.petInt);
-                        add = true;
-                    }
-                }
-                else
-                {
-                    // Multiple entities may be owned by same owner.
-                    add = true;
-                }
+                OwnerInfo = new OwnerInfo();
+                OwnerInfo.ownerDsp = line.ownDsp;
+                OwnerInfo.ownerInt = line.ownInt;
+                OwnerInfo.ownerEntityType = line.ownEntityType;
+                OwnerInfo.petDsp = line.srcDsp;
+                OwnerInfo.petInt = line.srcInt;
 
-                if (add)
-                {
-                    OwnerInfo = new OwnerInfo();
-                    OwnerInfo.ownerDsp = line.ownDsp;
-                    OwnerInfo.ownerInt = line.ownInt;
-                    OwnerInfo.ownerEntityType = line.ownEntityType;
-                    OwnerInfo.petDsp = line.srcDsp;
-                    OwnerInfo.petInt = line.srcInt;
-
-                    entityPlayerCache.Add(line.srcInt, OwnerInfo);
-                }
+                entityPlayerCache[line.srcInt] = OwnerInfo;
             }
         }
 
@@ -3111,13 +3494,24 @@ namespace NWParsing_Plugin
         // Should act as a FIFO if 100% matches.
         private LinkedList<ShieldLine> active = new LinkedList<ShieldLine>();
 
-        public UnmatchedShieldLines()
+        // Keep a pointer to the parser so we can add damage events for attacks that are never matched.
+        private NW_Parser parser;
+
+        public UnmatchedShieldLines(NW_Parser p)
         {
+            parser = p;
         }
 
         public void Clear()
         {
-            active.Clear();
+            LinkedListNode<ShieldLine> slnNext = active.First;
+            if (slnNext != null)
+            {
+                LinkedListNode<ShieldLine> cur = slnNext;
+                RemoveUnmatched(cur);
+                slnNext = active.First;
+            }
+            //active.Clear();
         }
 
         public void AddShield(MasterSwing ms, ParsedLine line)
@@ -3129,9 +3523,20 @@ namespace NWParsing_Plugin
             active.AddLast(sl);
         }
 
+        private void RemoveUnmatched(LinkedListNode<ShieldLine> cur)
+        {
+            // Drop old and unmatched shield line; the attack must have been fully absorbed.
+            ShieldLine sl = cur.Value;
+            ParsedLine l = sl.line;
+            parser.AddCombatActionHostile(l, (int)SwingTypeEnum.Melee, l.critical, "Shield", l.attackType, new Dnum((int)l.mag), l.mag, "Physical", l.magBase);
+            active.Remove(cur);
+        }
+
         public MasterSwing MatchDamage(ParsedLine line)
         {
             LinkedListNode<ShieldLine> slnNext = active.First;
+
+            MasterSwing found = null;
 
             while (slnNext != null)
             {
@@ -3165,8 +3570,16 @@ namespace NWParsing_Plugin
 13:09:26:09:36:20.9::Lord DopeVIII,P[200441364@6420568 Lord DopeVIII@lorddopeviii],,*,,*,Shielded Resurgence,Pn.Mrczs41,Null,ShowPowerDisplayName,0,0
                 */
 
+                // Check expired.
+                TimeSpan diff = line.logInfo.detectedTime - sl.ms.Time;
+
+                if (diff.TotalMilliseconds > 500)
+                {
+                    // Generally shield line should match in <= 100ms.
+                    RemoveUnmatched(cur);
+                }
                 // Compare
-                if ((sl.line.evtInt == line.evtInt) &&
+                else if ((sl.line.evtInt == line.evtInt) &&
                         (sl.line.ownInt == line.ownInt) &&
                         // (sl.line.srcInt == line.srcInt) &&
                         (sl.line.tgtInt == line.tgtInt) &&
@@ -3176,23 +3589,19 @@ namespace NWParsing_Plugin
                 {
                     // Matched
                     active.Remove(cur);
-                    return sl.ms;
-                }
-                else
-                {
-                    // Check expired.
-                    TimeSpan diff = line.logInfo.detectedTime - sl.ms.Time;
-
-                    if (diff.TotalMilliseconds > 500)
+                    if (found == null)
+                        found = sl.ms;
+                    else
                     {
-                        // Drop old and unmatch shield lines.
-                        // Generally shield line should match in <= 100ms.
-                        active.Remove(cur);
+                        // Add the damage from this line to the DamageF tag on 'found'.
+                        float fd = (float)found.Tags["DamageF"];
+                        fd += sl.line.mag;
+                        found.Tags["DamageF"] = fd;
                     }
                 }
             }
 
-            return null;
+            return found;
         }
     }
 
@@ -3251,7 +3660,23 @@ namespace NWParsing_Plugin
 
             this.logInfo = logInfo;
             this.ts = ++ActGlobals.oFormActMain.GlobalTimeSorter;
-            string[] split = logInfo.logLine.Split(NW_Parser.separatorLog, StringSplitOptions.None);
+            string line = logInfo.logLine;
+            string[] split = line.Split(NW_Parser.separatorLog, StringSplitOptions.None);
+
+            // TODO ouch. Implement this in a cleaner, more reliable way.
+            if (split.Length > 13)
+            {
+                // Too many fields, probably one of the names has a comma in it.
+                string overloadfix = line.Replace(", ", " ");
+                split = overloadfix.Split(NW_Parser.separatorLog, StringSplitOptions.None);
+            }
+            if (split.Length != 13)
+            {
+                // Still not right, give up.
+                this.error = true;
+                return;
+            }
+
             ownDsp = split[1];
             ownInt = split[2];
             srcDsp = split[3];
@@ -3264,10 +3689,6 @@ namespace NWParsing_Plugin
             flags = split[10];
             mag = float.Parse(split[11], NW_Parser.cultureLog);
             magBase = float.Parse(split[12], NW_Parser.cultureLog);
-            if (split.Length != 13)
-            {
-                this.error = true;
-            }
 
             ownEntityType = EntityType.Unknown;
             srcEntityType = EntityType.Unknown;
@@ -3299,7 +3720,6 @@ namespace NWParsing_Plugin
                             break;
                         case "Dodge":
                             dodge = true;
-                            special = (extraFlagCount++ > 0) ? (special + " | " + sflag) : sflag;
                             break;
                         case "Immune":
                             immune = true;
